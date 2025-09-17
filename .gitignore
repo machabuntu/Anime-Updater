@@ -132,6 +132,7 @@ config.json
 # Build artifacts
 build/
 dist/
+releases/
 *.exe
 *.pkg
 *.dmg

@@ -122,13 +122,13 @@ class MainWindow:
             episode_key = f"{title}_{episode}"
             
             # Update the "Now Watching" panel immediately
-            # Check if anime is in user's list first
-            if self._is_anime_in_list(title):
+            # Check if anime is in user's list first (only active statuses)
+            if self._is_anime_in_active_list(title):
                 anime_display = f"Now Watching: {title} - Episode {episode}"
-                self.logger.info(f"Anime found in user's list: {title}")
+                self.logger.info(f"Anime found in user's active list: {title}")
             else:
-                anime_display = f"Anime not in list: {title} - Episode {episode}"
-                self.logger.info(f"Anime not found in user's list: {title}")
+                anime_display = f"Anime not in active list: {title} - Episode {episode}"
+                self.logger.info(f"Anime not found in user's active list: {title}")
             
             # Update the panel on main thread
             self.root.after(0, lambda: self.current_anime_var.set(anime_display))
@@ -146,10 +146,13 @@ class MainWindow:
                     if current_episode_key in self.browser_watched_episodes:
                         del self.browser_watched_episodes[current_episode_key]
                     
-                    # Find matching anime in user's list
+                    # Find matching anime in user's list - only consider active statuses
+                    # Filter out Completed and Dropped anime to avoid conflicts with multiple seasons
+                    active_statuses = ['watching', 'planned', 'rewatching', 'on_hold']
                     all_anime = []
-                    for anime_list in self.anime_list_data.values():
-                        all_anime.extend(anime_list)
+                    for status_key in active_statuses:
+                        if status_key in self.anime_list_data:
+                            all_anime.extend(self.anime_list_data[status_key])
                     
                     self.logger.debug(f"Searching for anime match: {title}")
                     match_result = self.anime_matcher.find_best_match(title, all_anime, episode)
@@ -1048,13 +1051,13 @@ class MainWindow:
         """Handle detected episode"""
         self.logger.info(f"Episode detected: {episode_info.anime_name} - Episode {episode_info.episode_number}")
         
-        # Check if anime is in user's list
-        if self._is_anime_in_list(episode_info.anime_name):
+        # Check if anime is in user's list (only active statuses)
+        if self._is_anime_in_active_list(episode_info.anime_name):
             anime_display = f"Now Watching: {episode_info.anime_name} - Episode {episode_info.episode_number}"
-            self.logger.info(f"Anime found in user's list: {episode_info.anime_name}")
+            self.logger.info(f"Anime found in user's active list: {episode_info.anime_name}")
         else:
-            anime_display = f"Anime not in list: {episode_info.anime_name} - Episode {episode_info.episode_number}"
-            self.logger.info(f"Anime not found in user's list: {episode_info.anime_name}")
+            anime_display = f"Anime not in active list: {episode_info.anime_name} - Episode {episode_info.episode_number}"
+            self.logger.info(f"Anime not found in user's active list: {episode_info.anime_name}")
         
         self.root.after(0, lambda: self.current_anime_var.set(anime_display))
     
@@ -1064,10 +1067,13 @@ class MainWindow:
         
         def process_episode():
             try:
-                # Find matching anime in user's list
+                # Find matching anime in user's list - only consider active statuses
+                # Filter out Completed and Dropped anime to avoid conflicts with multiple seasons
+                active_statuses = ['watching', 'planned', 'rewatching', 'on_hold']
                 all_anime = []
-                for anime_list in self.anime_list_data.values():
-                    all_anime.extend(anime_list)
+                for status_key in active_statuses:
+                    if status_key in self.anime_list_data:
+                        all_anime.extend(self.anime_list_data[status_key])
                 
                 self.logger.debug(f"Searching for anime match: {episode_info.anime_name}")
                 match_result = self.anime_matcher.find_best_match(
@@ -2660,6 +2666,24 @@ class MainWindow:
             self.logger.error(f"Error during automatic update check: {e}")
             # Schedule the next check even if this one failed
             self._schedule_update_check()
+    
+    def _is_anime_in_active_list(self, anime_name: str) -> bool:
+        """Check if anime is in user's active list (Watching, Plan to Watch, Rewatching, On Hold)"""
+        if not self.anime_list_data:
+            return False
+        
+        # Only consider active statuses to avoid conflicts with multiple seasons
+        active_statuses = ['watching', 'planned', 'rewatching', 'on_hold']
+        
+        # Collect all anime from active statuses
+        all_anime = []
+        for status_key in active_statuses:
+            if status_key in self.anime_list_data:
+                all_anime.extend(self.anime_list_data[status_key])
+        
+        # Use the anime matcher to find a match
+        match_result = self.anime_matcher.find_best_match(anime_name, all_anime)
+        return match_result is not None
     
     def _stop_update_check_timer(self):
         """Stop the automatic update check timer"""
