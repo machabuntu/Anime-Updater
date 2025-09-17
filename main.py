@@ -67,6 +67,8 @@ def main():
         
         # Create main window
         root = tk.Tk()
+        photo = tk.PhotoImage(file = 'icon.png')
+        root.wm_iconphoto(False, photo)
 
         app = MainWindow(root, config)
         
