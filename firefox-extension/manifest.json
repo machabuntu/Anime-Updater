@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Shikimori Anime Scrobbler",
+  "version": "1.0",
+  "description": "Scrobble anime names/episodes from streaming websites and update progress in Shikimori Updater.",
+  "permissions": [
+    "activeTab",
+    "scripting",
+    "storage"
+  ],
+  "background": {
+    "scripts": ["background.js"]
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://qfilms.ru/video/*","https://qanime.ru/video/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "images/icon16.png",
+      "48": "images/icon48.png",
+      "128": "images/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "images/icon16.png",
+    "48": "images/icon48.png",
+    "128": "images/icon128.png"
+  },
+  "applications": {
+    "gecko": {
+        "id": "shikikomori-updater@ubububu.ru",
+        "strict_min_version": "53.0" // Or the specific Firefox version you target
+    }
+  }
+}
+

@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test qfilms.ru anime detection</title>
+    <meta property="og:title" content="Тест Фильм / Test Movie - 1 сезон, 3 серия">
+    <meta property="ya:ovs:episod" content="3">
+</head>
+<body>
+    <h1>qfilms.ru Test Page</h1>
+    <p>This is a test page to verify qfilms.ru anime detection works correctly.</p>
+    
+    <script>
+        // Simulate qfilms.ru hostname
+        Object.defineProperty(window, 'location', {
+            value: {
+                hostname: 'qfilms.ru',
+                href: 'https://qfilms.ru/video/123456-test-film-1-sezon-3-seriya'
+            }
+        });
+    </script>
+    
+    <script src="content.js"></script>
+    
+    <script>
+        // Test the extraction
+        setTimeout(() => {
+            console.log('Testing qfilms.ru extraction...');
+            const result = extractAnimeInfo();
+            console.log('Extraction result:', result);
+            
+            if (result) {
+                document.body.innerHTML += `
+                    <div style="margin-top: 20px; padding: 10px; border: 1px solid #ccc;">
+                        <h3>Extraction Results:</h3>
+                        <p><strong>Title:</strong> ${result.title}</p>
+                        <p><strong>Episode:</strong> ${result.episode}</p>
+                        <p><strong>URL:</strong> ${result.url}</p>
+                        <p><strong>Site:</strong> ${result.site}</p>
+                    </div>
+                `;
+            } else {
+                document.body.innerHTML += '<div style="color: red;">No anime info extracted!</div>';
+            }
+        }, 100);
+    </script>
+</body>
+</html>

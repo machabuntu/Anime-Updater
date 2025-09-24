@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Shikimori Anime Scrobbler</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            width: 350px;
+            padding: 15px;
+            margin: 0;
+        }
+        h1 {
+            font-size: 1.3em;
+            margin: 0 0 15px 0;
+            color: #333;
+        }
+        .status {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        .status.error {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        .anime-info {
+            background: #fff;
+            border: 1px solid #ddd;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .manual-scrobble {
+            margin-top: 15px;
+        }
+        input, button {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #007cba;
+            color: white;
+            cursor: pointer;
+            border: none;
+        }
+        button:hover {
+            background: #005a87;
+        }
+        button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        .small-text {
+            font-size: 0.9em;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>Shikimori Anime Scrobbler</h1>
+    
+    <div id="status" class="status">
+        <strong>Status:</strong> <span id="status-text">Checking connection...</span>
+    </div>
+    
+    <div id="current-anime" class="anime-info" style="display: none;">
+        <strong>Detected:</strong><br>
+        <span id="anime-title">-</span><br>
+        <span class="small-text">Episode <span id="anime-episode">-</span></span>
+    </div>
+    
+    <div class="manual-scrobble">
+        <strong>Manual Scrobble:</strong><br>
+        <input type="text" id="manual-title" placeholder="Anime title">
+        <input type="number" id="manual-episode" placeholder="Episode number" min="1">
+        <button id="scrobble-btn" onclick="manualScrobble()">Scrobble Episode</button>
+    </div>
+    
+    <div class="small-text" style="margin-top: 15px;">
+        Make sure Shikimori Updater is running on your computer.
+    </div>
+    
+    <script src="popup.js"></script>
+</body>
+</html>
