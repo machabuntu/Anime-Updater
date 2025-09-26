@@ -252,7 +252,11 @@ class ShikimoriClient:
             response = self._make_request('GET', '/animes', params=params)
             
             if response.status_code == 200:
-                return response.json()
+                results = response.json()
+                # Filter out None values from the API response
+                if isinstance(results, list):
+                    return [item for item in results if item is not None]
+                return []
             return []
         except Exception:
             return []

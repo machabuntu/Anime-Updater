@@ -1,4 +1,4 @@
-('F:\\Git\\ShikimoriUpdater\\build_updater\\updater\\PYZ-00.pyz',
+('F:\\Git\\Shikimori-Updater\\build_updater\\updater\\PYZ-00.pyz',
  [('_compat_pickle',
    'C:\\Users\\icefe\\miniconda3\\Lib\\_compat_pickle.py',
    'PYMODULE'),

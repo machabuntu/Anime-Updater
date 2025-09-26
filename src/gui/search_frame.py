@@ -137,9 +137,13 @@ class SearchFrame(ttk.Frame):
             self.status_label.config(text="No results found")
             return
         
-        # Filter out anime already in user's list
+        # Filter out None values and anime already in user's list
         filtered_results = []
         for anime in results:
+            # Skip None values
+            if anime is None:
+                continue
+                
             anime_id = anime.get('id')
             if anime_id and not self._is_anime_in_list(anime_id):
                 filtered_results.append(anime)
@@ -161,8 +165,12 @@ class SearchFrame(ttk.Frame):
         
         # Populate results tree with filtered results
         for anime in filtered_results:
+            # Additional safety check (should not be needed after the fix above, but just in case)
+            if anime is None:
+                continue
+                
             name = anime.get('name', 'Unknown')
-            anime_type = anime.get('kind', '').upper()
+            anime_type = anime.get('kind', '').upper() if anime.get('kind') else ''
             episodes = anime.get('episodes', 0) or '-'
             year = anime.get('aired_on', '')[:4] if anime.get('aired_on') else '-'
             

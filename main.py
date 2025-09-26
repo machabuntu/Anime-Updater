@@ -67,8 +67,23 @@ def main():
         
         # Create main window
         root = tk.Tk()
-        photo = tk.PhotoImage(file = 'icon.png')
-        root.wm_iconphoto(False, photo)
+        
+        # Load icon with proper path handling
+        try:
+            if getattr(sys, 'frozen', False):
+                # Running as PyInstaller executable
+                icon_path = os.path.join(sys._MEIPASS, 'icon.png')
+            else:
+                # Running as script
+                icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'icon.png')
+            
+            if os.path.exists(icon_path):
+                photo = tk.PhotoImage(file=icon_path)
+                root.wm_iconphoto(False, photo)
+            else:
+                logger.warning(f"Icon file not found at: {icon_path}")
+        except Exception as e:
+            logger.warning(f"Failed to load icon: {e}")
 
         app = MainWindow(root, config)
         

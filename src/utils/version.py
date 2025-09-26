@@ -3,13 +3,13 @@ Version management for Shikimori Updater
 """
 
 # Application version
-__version__ = "3.2.7"
+__version__ = "3.2.8"
 
 # GitHub repository for updates
 GITHUB_REPO = "machabuntu/Shikimori-Updater"  # Replace with your actual repo
 
 # Build information
-BUILD_DATE = "2025-09-18"
+BUILD_DATE = "2025-09-26"
 BUILD_NUMBER = "1"
 
 def get_version() -> str:
