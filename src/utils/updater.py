@@ -45,6 +45,8 @@ class Updater:
             True if update is available, False otherwise
         """
         try:
+            if not getattr(sys, 'frozen', False):
+                return False
             logger.info(f"Checking for updates from {self.api_url}")
             
             # Create request with user agent
