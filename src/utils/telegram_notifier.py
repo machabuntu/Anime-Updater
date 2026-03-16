@@ -16,6 +16,12 @@ class TelegramNotifier:
         self.logger = get_logger('telegram_notifier')
         self.base_url = "https://api.telegram.org/bot{token}/{method}"
         
+    def _get_service_base_url(self) -> str:
+        service = self.config.get('service.active', 'shikimori')
+        if service == 'mal':
+            return "https://myanimelist.net"
+        return "https://shikimori.io"
+
     def is_enabled(self) -> bool:
         """Check if Telegram notifications are enabled"""
         return self.config.get('telegram.enabled', False)
@@ -33,7 +39,7 @@ class TelegramNotifier:
         if anime_url:
             # Ensure URL is absolute
             if anime_url.startswith('/'):
-                full_url = f"https://shikimori.one{anime_url}"
+                full_url = f"{self._get_service_base_url()}{anime_url}"
             else:
                 full_url = anime_url
             anime_display = f"<a href='{full_url}'>{anime_name}</a>"
@@ -64,7 +70,7 @@ class TelegramNotifier:
         if anime_url:
             # Ensure URL is absolute
             if anime_url.startswith('/'):
-                full_url = f"https://shikimori.one{anime_url}"
+                full_url = f"{self._get_service_base_url()}{anime_url}"
             else:
                 full_url = anime_url
             anime_display = f"<a href='{full_url}'>{anime_name}</a>"
@@ -112,7 +118,7 @@ class TelegramNotifier:
         if anime_url:
             # Ensure URL is absolute
             if anime_url.startswith('/'):
-                full_url = f"https://shikimori.one{anime_url}"
+                full_url = f"{self._get_service_base_url()}{anime_url}"
             else:
                 full_url = anime_url
             anime_display = f"<a href='{full_url}'>{anime_name}</a>"
@@ -150,7 +156,7 @@ class TelegramNotifier:
         if anime_url:
             # Ensure URL is absolute
             if anime_url.startswith('/'):
-                full_url = f"https://shikimori.one{anime_url}"
+                full_url = f"{self._get_service_base_url()}{anime_url}"
             else:
                 full_url = anime_url
             anime_display = f"<a href='{full_url}'>{anime_name}</a>"

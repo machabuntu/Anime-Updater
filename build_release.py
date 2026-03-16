@@ -67,7 +67,7 @@ def create_release_package(version, output_dir="releases"):
         os.makedirs(version_dir)
         
         # Copy executable
-        exe_path = os.path.join("dist", "Shikimori Updater.exe")
+        exe_path = os.path.join("dist", "Anime Updater.exe")
         if os.path.exists(exe_path):
             shutil.copy2(exe_path, version_dir)
             print(f"Copied executable to {version_dir}")
@@ -91,7 +91,7 @@ def create_release_package(version, output_dir="releases"):
         release_info = {
             "version": version,
             "build_date": datetime.date.today().isoformat(),
-            "executable": "Shikimori Updater.exe",
+            "executable": "Anime Updater.exe",
             "files": os.listdir(version_dir)
         }
         
@@ -99,7 +99,7 @@ def create_release_package(version, output_dir="releases"):
             json.dump(release_info, f, indent=2)
         
         # Create zip file
-        zip_path = os.path.join(output_dir, f"ShikimoriUpdater-v{version}.zip")
+        zip_path = os.path.join(output_dir, f"AnimeUpdater-v{version}.zip")
         shutil.make_archive(zip_path.replace('.zip', ''), 'zip', version_dir)
         
         print(f"Created release package: {zip_path}")
@@ -111,7 +111,7 @@ def create_release_package(version, output_dir="releases"):
 
 def main():
     """Main build and release function"""
-    print("Shikimori Updater Release Builder")
+    print("Anime Updater Release Builder")
     print("=" * 40)
     
     # Get version from command line or prompt

@@ -1,6 +1,6 @@
 """
 Anime Name Matcher
-Matches detected anime names with Shikimori anime data using fuzzy matching
+Matches detected anime names with anime list data using fuzzy matching
 """
 
 import re
@@ -21,7 +21,7 @@ class AnimeMatcher:
         
         Args:
             detected_name: Name detected from video file
-            anime_list: List of anime from user's Shikimori list
+            anime_list: List of anime from user's list
             episode_number: Episode number (used for additional validation)
             
         Returns:
@@ -73,7 +73,7 @@ class AnimeMatcher:
         
         Args:
             detected_name: Name detected from video file
-            search_results: Search results from Shikimori API
+            search_results: Search results from the API
             episode_number: Episode number for validation
             
         Returns:

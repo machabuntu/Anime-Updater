@@ -1,5 +1,5 @@
 """
-Cache Manager for Shikimori Updater
+Cache Manager for Anime Updater
 Handles caching anime list data to disk for faster startup
 """
 

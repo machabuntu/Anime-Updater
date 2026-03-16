@@ -195,7 +195,7 @@ class NotificationManager:
         anime_id = anime_entry['anime']['id']
         
         def on_notification_shown():
-            # Update anime information from Shikimori
+            # Update anime information from the active service
             self._update_anime_detailed_info(anime_id)
             
             if self.on_episode_notification:
@@ -220,7 +220,7 @@ class NotificationManager:
         print(f"Release notification shown for {anime_name}")
     
     def _update_anime_detailed_info(self, anime_id: int):
-        """Update detailed anime information from Shikimori API"""
+        """Update detailed anime information from the active service API"""
         def update_info():
             try:
                 detailed_info = self.shikimori_client.get_anime_details(anime_id)

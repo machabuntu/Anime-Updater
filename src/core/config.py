@@ -1,5 +1,5 @@
 """
-Configuration management for Shikimori Updater
+Configuration management for Anime Updater
 """
 
 import os
@@ -20,9 +20,19 @@ class Config:
         
         # Default configuration
         self.default_config = {
+            "service": {
+                "active": "shikimori"
+            },
             "shikimori": {
                 "client_id": "Mf86jr7hvlSRXHy0yNTqUi8kxQgYiB-7whXD1JVYI60",
                 "client_secret": "hcTpGGUHEpW7-aIU4L6y8sqwsoLXcPY58ttHwWAGzb8",
+                "access_token": None,
+                "refresh_token": None,
+                "user_id": None
+            },
+            "mal": {
+                "client_id": "",
+                "client_secret": "",
                 "access_token": None,
                 "refresh_token": None,
                 "user_id": None
@@ -113,6 +123,12 @@ class Config:
         self.save_config()
     
     @property
+    def active_service(self):
+        """Get the currently active anime service ('shikimori' or 'mal')"""
+        return self.get('service.active', 'shikimori')
+
+    @property
     def is_authenticated(self):
-        """Check if user is authenticated with Shikimori"""
-        return bool(self.get('shikimori.access_token'))
+        """Check if user is authenticated with the active service"""
+        service = self.active_service
+        return bool(self.get(f'{service}.access_token'))

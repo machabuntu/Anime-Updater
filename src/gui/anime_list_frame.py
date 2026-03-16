@@ -41,7 +41,7 @@ class AnimeListFrame(ttk.Frame):
         status_order = ['watching', 'planned', 'completed', 'on_hold', 'dropped', 'rewatching']
         
         for status in status_order:
-            status_display = self.main_window.get_shikimori_client().STATUSES.get(status, status)
+            status_display = self.main_window.get_active_client().STATUSES.get(status, status)
             
             # Create empty frame for this tab (content will be outside)
             tab_frame = ttk.Frame(self.status_tabs)
@@ -191,7 +191,8 @@ class AnimeListFrame(ttk.Frame):
     def _create_context_menu(self):
         """Create context menu for treeview"""
         self.context_menu = tk.Menu(self, tearoff=0)
-        self.context_menu.add_command(label="Open on Shikimori", command=self._open_on_shikimori)
+        service_name = getattr(self.main_window.get_active_client(), 'SERVICE_NAME', 'Shikimori')
+        self.context_menu.add_command(label=f"Open on {service_name}", command=self._open_on_service)
         self.context_menu.add_separator()
         self.context_menu.add_command(label="Mark as Watching", command=lambda: self._change_status_via_main_window("watching"))
         self.context_menu.add_command(label="Mark as Completed", command=lambda: self._change_status_via_main_window("completed"))
@@ -325,7 +326,7 @@ class AnimeListFrame(ttk.Frame):
         filtered_data = []
         
         # Status mapping for reverse lookup
-        status_map = {v: k for k, v in self.main_window.get_shikimori_client().STATUSES.items()}
+        status_map = {v: k for k, v in self.main_window.get_active_client().STATUSES.items()}
         
         item_count = 0
         
@@ -334,7 +335,7 @@ class AnimeListFrame(ttk.Frame):
         
         # Process each status group
         for status_key, anime_list in self.anime_data.items():
-            status_display = self.main_window.get_shikimori_client().STATUSES.get(status_key, status_key)
+            status_display = self.main_window.get_active_client().STATUSES.get(status_key, status_key)
             
             # Skip if not the current tab's status
             if status_key != self.current_status:
@@ -435,7 +436,7 @@ class AnimeListFrame(ttk.Frame):
                     anime_status = detailed_cache[anime_id].get('status', '').lower()
                     
                     # Color anime that are not released (ongoing, announced, etc.)
-                    if anime_status and anime_status != 'released':
+                    if anime_status and anime_status not in ('released', 'finished_airing'):
                         tags.append('non_released')
             
             item_id = self.tree.insert("", tk.END, values=values[:-1], tags=tags)
@@ -498,7 +499,7 @@ class AnimeListFrame(ttk.Frame):
         
         for i, status in enumerate(status_order):
             count = status_counters.get(status, 0)
-            status_display = self.main_window.get_shikimori_client().STATUSES.get(status, status)
+            status_display = self.main_window.get_active_client().STATUSES.get(status, status)
             self.status_tabs.tab(i, text=f"{status_display} [{count}]")
     
     def _get_selected_anime(self) -> Optional[Dict[str, Any]]:
@@ -586,8 +587,8 @@ class AnimeListFrame(ttk.Frame):
         self.main_window.set_selected_anime(anime_entry)
         
         # Update the compact status combo to the new status for proper UI update
-        if new_status in self.main_window.shikimori.STATUSES:
-            status_display = self.main_window.shikimori.STATUSES[new_status]
+        if new_status in self.main_window.get_active_client().STATUSES:
+            status_display = self.main_window.get_active_client().STATUSES[new_status]
             self.main_window.compact_status_var.set(status_display)
         
         # Trigger the main window's status update method
@@ -607,7 +608,7 @@ class AnimeListFrame(ttk.Frame):
             def remove_anime():
                 try:
                     rate_id = anime_entry['id']
-                    success = self.main_window.get_shikimori_client().delete_anime_from_list(rate_id)
+                    success = self.main_window.get_active_client().delete_anime_from_list(rate_id)
                     
                     if success:
                         self.after(0, lambda: messagebox.showinfo("Success", f"'{anime_name}' removed from list"))
@@ -621,13 +622,13 @@ class AnimeListFrame(ttk.Frame):
             threading.Thread(target=remove_anime, daemon=True).start()
     
     def _update_anime_data(self, anime_entry: Dict[str, Any], **updates):
-        """Update anime data on Shikimori"""
+        """Update anime data on the active service"""
         def update_data():
             try:
                 rate_id = anime_entry['id']
                 anime_name = anime_entry['anime'].get('name', 'Unknown')
                 
-                success = self.main_window.get_shikimori_client().update_anime_progress(
+                success = self.main_window.get_active_client().update_anime_progress(
                     rate_id, **updates)
                 
                 if success:
@@ -680,19 +681,19 @@ class AnimeListFrame(ttk.Frame):
             
             self._update_anime_data(anime_entry, **updates)
     
-    def _open_on_shikimori(self):
-        """Open selected anime on Shikimori website"""
+    def _open_on_service(self):
+        """Open selected anime on the active service's website"""
         anime_entry = self._get_selected_anime()
         if not anime_entry:
             return
         
         anime_data = anime_entry.get('anime', {})
         anime_url = anime_data.get('url')
+        client = self.main_window.get_active_client()
         
         if anime_url:
-            # Make sure URL is complete
             if anime_url.startswith('/'):
-                anime_url = 'https://shikimori.one' + anime_url
+                anime_url = client.SERVICE_URL + anime_url
             
             try:
                 webbrowser.open(anime_url)
@@ -775,14 +776,14 @@ class AnimeEditDialog:
         ttk.Label(main_frame, text="Status:").grid(row=1, column=0, sticky=tk.W, pady=5)
         self.status_var = tk.StringVar()
         status_combo = ttk.Combobox(main_frame, textvariable=self.status_var,
-                                   values=list(self.main_window.get_shikimori_client().STATUSES.values()),
+                                   values=list(self.main_window.get_active_client().STATUSES.values()),
                                    state="readonly", width=20)
         status_combo.grid(row=1, column=1, sticky=tk.W, pady=5)
         
         # Set current status
         current_status = self.anime_entry.get('status', '')
-        if current_status in self.main_window.get_shikimori_client().STATUSES:
-            self.status_var.set(self.main_window.get_shikimori_client().STATUSES[current_status])
+        if current_status in self.main_window.get_active_client().STATUSES:
+            self.status_var.set(self.main_window.get_active_client().STATUSES[current_status])
         
         # Episodes
         ttk.Label(main_frame, text="Episodes:").grid(row=2, column=0, sticky=tk.W, pady=5)
@@ -823,7 +824,7 @@ class AnimeEditDialog:
         new_score = self.score_var.get()
         
         # Convert status display back to API key
-        status_map = {v: k for k, v in self.main_window.get_shikimori_client().STATUSES.items()}
+        status_map = {v: k for k, v in self.main_window.get_active_client().STATUSES.items()}
         new_status = status_map.get(new_status_display)
         
         # Check for changes
@@ -847,7 +848,7 @@ class AnimeEditDialog:
         def update_anime():
             try:
                 rate_id = self.anime_entry['id']
-                success = self.main_window.get_shikimori_client().update_anime_progress(
+                success = self.main_window.get_active_client().update_anime_progress(
                     rate_id, **updates)
                 
                 if success:

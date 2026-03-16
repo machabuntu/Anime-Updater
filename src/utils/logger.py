@@ -1,5 +1,5 @@
 """
-Logging utility for Shikimori Updater
+Logging utility for Anime Updater
 Provides both console and file logging with date-based rotation
 """
 
@@ -65,7 +65,7 @@ class Logger:
         self.log_dir.mkdir(parents=True, exist_ok=True)
         
         # Setup logger
-        self.logger = logging.getLogger('ShikimoriUpdater')
+        self.logger = logging.getLogger('AnimeUpdater')
         self.logger.setLevel(logging.DEBUG)
         
         # Clear any existing handlers
@@ -100,14 +100,14 @@ class Logger:
         
         # Log startup
         self.logger.info("=" * 50)
-        self.logger.info("Shikimori Updater started")
+        self.logger.info("Anime Updater started")
         self.logger.info(f"Log file: {self.file_handler.baseFilename}")
         self.logger.info("=" * 50)
     
     def get_logger(self, name=None):
         """Get a logger instance"""
         if name:
-            return logging.getLogger(f'ShikimoriUpdater.{name}')
+            return logging.getLogger(f'AnimeUpdater.{name}')
         return self.logger
     
     def get_log_file_path(self):

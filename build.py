@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Build script for creating Shikimori Updater executable
+Build script for creating Anime Updater executable
 """
 
 import os
@@ -30,7 +30,7 @@ def build_executable():
     print("Building executable...")
     
     # Use spec file if it exists, otherwise use command line
-    spec_files = ["Shikimori Updater.spec", "shikimori_updater.spec"]
+    spec_files = ["Anime Updater.spec", "anime_updater.spec", "Shikimori Updater.spec", "shikimori_updater.spec"]
     spec_file = None
     for spec in spec_files:
         if os.path.exists(spec):
@@ -50,7 +50,7 @@ def build_executable():
         # PyInstaller command
         cmd = [
             "pyinstaller",
-            "--name", "Shikimori Updater",
+            "--name", "Anime Updater",
             "--windowed",  # No console window
             "--onefile",   # Single executable file
             "--clean",     # Clean PyInstaller cache
@@ -113,7 +113,7 @@ def copy_files():
 
 def main():
     """Main build function"""
-    print("Shikimori Updater Build Script")
+    print("Anime Updater Build Script")
     print("=" * 40)
     
     # Check PyInstaller
@@ -133,7 +133,7 @@ def main():
     print("\n" + "=" * 40)
     print("[SUCCESS] Build completed successfully!")
     
-    exe_path = os.path.join("dist", "Shikimori Updater.exe")
+    exe_path = os.path.join("dist", "Anime Updater.exe")
     if os.path.exists(exe_path):
         size = os.path.getsize(exe_path) / (1024 * 1024)  # Size in MB
         print(f"\nExecutable created: {exe_path}")

@@ -94,12 +94,12 @@ class AuthDialog:
 
 Follow these steps:
 
-1. Go to https://shikimori.one/oauth/applications
+1. Go to https://shikimori.io/oauth/applications
 
 2. Click 'New Application'
 
 3. Fill in the form with these EXACT details:
-   • Name: Shikimori Updater (or any name you prefer)
+   • Name: Anime Updater (or any name you prefer)
    • Redirect URI: http://localhost:8080/callback
      ⚠️  CRITICAL: Must be exactly this URL, no variations!
    • Scopes: user_rates
@@ -189,7 +189,7 @@ Follow these steps:
     
     def _open_oauth_page(self):
         """Open Shikimori OAuth applications page"""
-        webbrowser.open("https://shikimori.one/oauth/applications")
+        webbrowser.open("https://shikimori.io/oauth/applications")
     
     def _start_authorization(self):
         """Start OAuth authorization process"""
@@ -281,7 +281,7 @@ Follow these steps:
                         "This error indicates a problem with your OAuth application setup:\n\n"
                         "REQUIRED FIXES:\n"
                         "1. Double-check your Shikimori OAuth application settings:\n"
-                        "   • Go to https://shikimori.one/oauth/applications\n"
+                        "   • Go to https://shikimori.io/oauth/applications\n"
                         "   • Edit your application\n"
                         "   • Redirect URI must be EXACTLY: http://localhost:8080/callback\n"
                         "   • Scopes must include: user_rates\n\n"

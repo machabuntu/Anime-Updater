@@ -85,7 +85,7 @@ class SearchFrame(ttk.Frame):
         
         self.status_var = tk.StringVar(value="Plan to Watch")
         status_combo = ttk.Combobox(add_frame, textvariable=self.status_var,
-                                   values=list(self.main_window.get_shikimori_client().STATUSES.values()),
+                                   values=list(self.main_window.get_active_client().STATUSES.values()),
                                    state="readonly", width=15)
         status_combo.pack(side=tk.LEFT, padx=(0, 10))
         
@@ -116,7 +116,7 @@ class SearchFrame(ttk.Frame):
         def search_thread():
             try:
                 # Perform search
-                results = self.main_window.get_shikimori_client().search_anime(query)
+                results = self.main_window.get_active_client().search_anime(query)
                 
                 # Update UI on main thread
                 self.after(0, lambda: self._display_results(results))
@@ -232,7 +232,7 @@ class SearchFrame(ttk.Frame):
         
         # Get status to add as
         status_display = self.status_var.get()
-        status_map = {v: k for k, v in self.main_window.get_shikimori_client().STATUSES.items()}
+        status_map = {v: k for k, v in self.main_window.get_active_client().STATUSES.items()}
         status_key = status_map.get(status_display, 'planned')
         
         anime_name = anime_data.get('name', 'Unknown')
@@ -254,7 +254,7 @@ class SearchFrame(ttk.Frame):
         def add_anime():
             try:
                 # Add anime to list
-                result = self.main_window.get_shikimori_client().add_anime_to_list(anime_id, status_key)
+                result = self.main_window.get_active_client().add_anime_to_list(anime_id, status_key)
                 
                 if result:
                     # Success - show status message and add to cache

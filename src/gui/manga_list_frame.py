@@ -1,5 +1,5 @@
 """
-Manga List Frame for Shikimori Updater
+Manga List Frame for Anime Updater
 Displays and manages user's manga list with filtering and editing capabilities
 """
 
@@ -172,7 +172,8 @@ class MangaListFrame(ttk.Frame):
     def _create_context_menu(self):
         """Create context menu for treeview"""
         self.context_menu = tk.Menu(self, tearoff=0)
-        self.context_menu.add_command(label="Open on Shikimori", command=self._open_on_shikimori)
+        service_name = getattr(self.main_window.get_active_client(), 'SERVICE_NAME', 'Shikimori')
+        self.context_menu.add_command(label=f"Open on {service_name}", command=self._open_on_service)
         self.context_menu.add_separator()
         self.context_menu.add_command(label="Mark as Reading", command=lambda: self._change_status_via_main_window("watching"))
         self.context_menu.add_command(label="Mark as Completed", command=lambda: self._change_status_via_main_window("completed"))
@@ -295,7 +296,7 @@ class MangaListFrame(ttk.Frame):
         filtered_data = []
         
         # Status mapping for reverse lookup
-        status_map = {v: k for k, v in self.main_window.get_shikimori_client().MANGA_STATUSES.items()}
+        status_map = {v: k for k, v in self.main_window.get_active_client().MANGA_STATUSES.items()}
         
         item_count = 0
         
@@ -304,7 +305,7 @@ class MangaListFrame(ttk.Frame):
         
         # Process each status group
         for status_key, manga_list in self.manga_data.items():
-            status_display = self.main_window.get_shikimori_client().MANGA_STATUSES.get(status_key, status_key)
+            status_display = self.main_window.get_active_client().MANGA_STATUSES.get(status_key, status_key)
             
             # Skip if not the current tab's status
             if status_key != self.current_status:
@@ -457,7 +458,7 @@ class MangaListFrame(ttk.Frame):
         
         for i, status in enumerate(status_order):
             count = status_counters.get(status, 0)
-            status_display = self.main_window.get_shikimori_client().MANGA_STATUSES.get(status, status)
+            status_display = self.main_window.get_active_client().MANGA_STATUSES.get(status, status)
             self.status_tabs.tab(i, text=f"{status_display} [{count}]")
     
     def _get_selected_manga(self) -> Optional[Dict[str, Any]]:
@@ -543,8 +544,8 @@ class MangaListFrame(ttk.Frame):
         self.main_window.set_selected_manga(manga_entry)
         
         # Update the compact status combo to the new status for proper UI update
-        if new_status in self.main_window.shikimori.MANGA_STATUSES:
-            status_display = self.main_window.shikimori.MANGA_STATUSES[new_status]
+        if new_status in self.main_window.get_active_client().MANGA_STATUSES:
+            status_display = self.main_window.get_active_client().MANGA_STATUSES[new_status]
             self.main_window.compact_status_var.set(status_display)
         
         # Trigger the main window's status update method
@@ -564,7 +565,7 @@ class MangaListFrame(ttk.Frame):
             def remove_manga():
                 try:
                     rate_id = manga_entry['id']
-                    success = self.main_window.get_shikimori_client().delete_manga_from_list(rate_id)
+                    success = self.main_window.get_active_client().delete_manga_from_list(rate_id)
                     
                     if success:
                         self.after(0, lambda: messagebox.showinfo("Success", f"'{manga_name}' removed from list"))
@@ -578,13 +579,13 @@ class MangaListFrame(ttk.Frame):
             threading.Thread(target=remove_manga, daemon=True).start()
     
     def _update_manga_data(self, manga_entry: Dict[str, Any], **updates):
-        """Update manga data on Shikimori"""
+        """Update manga data on the active service"""
         def update_data():
             try:
                 rate_id = manga_entry['id']
                 manga_name = manga_entry['manga'].get('name', 'Unknown')
                 
-                success = self.main_window.get_shikimori_client().update_manga_progress(
+                success = self.main_window.get_active_client().update_manga_progress(
                     rate_id, **updates)
                 
                 if success:
@@ -637,19 +638,19 @@ class MangaListFrame(ttk.Frame):
             
             self._update_manga_data(manga_entry, **updates)
     
-    def _open_on_shikimori(self):
-        """Open selected manga on Shikimori website"""
+    def _open_on_service(self):
+        """Open selected manga on the active service's website"""
         manga_entry = self._get_selected_manga()
         if not manga_entry:
             return
         
         manga_data = manga_entry.get('manga', {})
         manga_url = manga_data.get('url')
+        client = self.main_window.get_active_client()
         
         if manga_url:
-            # Make sure URL is complete
             if manga_url.startswith('/'):
-                manga_url = 'https://shikimori.one' + manga_url
+                manga_url = client.SERVICE_URL + manga_url
             
             try:
                 webbrowser.open(manga_url)
@@ -707,14 +708,14 @@ class MangaEditDialog:
         ttk.Label(main_frame, text="Status:").grid(row=1, column=0, sticky=tk.W, pady=5)
         self.status_var = tk.StringVar()
         status_combo = ttk.Combobox(main_frame, textvariable=self.status_var,
-                                   values=list(self.main_window.get_shikimori_client().MANGA_STATUSES.values()),
+                                   values=list(self.main_window.get_active_client().MANGA_STATUSES.values()),
                                    state="readonly", width=20)
         status_combo.grid(row=1, column=1, sticky=tk.W, pady=5)
         
         # Set current status
         current_status = self.manga_entry.get('status', '')
-        if current_status in self.main_window.get_shikimori_client().MANGA_STATUSES:
-            self.status_var.set(self.main_window.get_shikimori_client().MANGA_STATUSES[current_status])
+        if current_status in self.main_window.get_active_client().MANGA_STATUSES:
+            self.status_var.set(self.main_window.get_active_client().MANGA_STATUSES[current_status])
         
         # Chapters
         ttk.Label(main_frame, text="Chapters:").grid(row=2, column=0, sticky=tk.W, pady=5)
@@ -770,7 +771,7 @@ class MangaEditDialog:
         new_score = self.score_var.get()
         
         # Convert status display back to API key
-        status_map = {v: k for k, v in self.main_window.get_shikimori_client().MANGA_STATUSES.items()}
+        status_map = {v: k for k, v in self.main_window.get_active_client().MANGA_STATUSES.items()}
         new_status = status_map.get(new_status_display)
         
         # Check what changed
@@ -790,7 +791,7 @@ class MangaEditDialog:
                     rate_id = self.manga_entry['id']
                     manga_name = self.manga_entry['manga'].get('name', 'Unknown')
                     
-                    success = self.main_window.get_shikimori_client().update_manga_progress(
+                    success = self.main_window.get_active_client().update_manga_progress(
                         rate_id, **changes)
                     
                     if success:

@@ -1,12 +1,12 @@
 """
-Version management for Shikimori Updater
+Version management for Anime Updater
 """
 
 # Application version
 __version__ = "3.2.8"
 
 # GitHub repository for updates
-GITHUB_REPO = "machabuntu/Shikimori-Updater"  # Replace with your actual repo
+GITHUB_REPO = "machabuntu/Anime-Updater"
 
 # Build information
 BUILD_DATE = "2025-09-26"

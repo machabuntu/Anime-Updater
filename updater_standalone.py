@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Standalone updater for Shikimori Updater
+Standalone updater for Anime Updater
 This is compiled as a separate executable to avoid MEI folder conflicts
 """
 
@@ -29,7 +29,7 @@ def shutdown_app_via_api(timeout=30):
             data=json.dumps({}).encode('utf-8'),
             headers={
                 'Content-Type': 'application/json',
-                'User-Agent': 'ShikimoriUpdater-StandaloneUpdater/1.0'
+                'User-Agent': 'AnimeUpdater-StandaloneUpdater/1.0'
             },
             method='POST'
         )
@@ -137,7 +137,7 @@ def restart_application(exe_path):
         return False
 
 def main():
-    parser = argparse.ArgumentParser(description='Standalone updater for Shikimori Updater')
+    parser = argparse.ArgumentParser(description='Standalone updater for Anime Updater')
     parser.add_argument('--new-exe', required=True, help='Path to the new executable')
     parser.add_argument('--target-exe', required=True, help='Path to the target executable to replace')
     parser.add_argument('--wait-timeout', type=int, default=30, help='Timeout in seconds to wait for process exit')
@@ -145,7 +145,7 @@ def main():
     args = parser.parse_args()
     
     print("=" * 50)
-    print("Shikimori Updater - Standalone Updater")
+    print("Anime Updater - Standalone Updater")
     print("=" * 50)
     
     # Validate paths

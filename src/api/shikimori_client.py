@@ -11,8 +11,11 @@ from typing import Optional, Dict, Any, List
 class ShikimoriClient:
     """Client for Shikimori API operations"""
     
-    BASE_URL = "https://shikimori.one/api"
-    AUTH_URL = "https://shikimori.one/oauth"
+    BASE_URL = "https://shikimori.io/api"
+    AUTH_URL = "https://shikimori.io/oauth"
+    SERVICE_NAME = "Shikimori"
+    SERVICE_URL = "https://shikimori.io"
+    SERVICE_KEY = "shikimori"
     
     # Anime list statuses
     STATUSES = {

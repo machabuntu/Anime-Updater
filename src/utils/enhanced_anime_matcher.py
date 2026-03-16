@@ -159,7 +159,7 @@ class EnhancedAnimeMatcher(AnimeMatcher):
         
         Args:
             detected_name: Name detected from video file
-            anime_list: List of anime from user's Shikimori list
+            anime_list: List of anime from user's list
             episode_number: Episode number (used for additional validation)
             
         Returns:
@@ -409,5 +409,5 @@ class EnhancedAnimeMatcher(AnimeMatcher):
         self.on_cache_updated_callback = callback
     
     def search_anime(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
-        """Search for anime by name using Shikimori API"""
+        """Search for anime by name using the active service API"""
         return self.shikimori_client.search_anime(query, limit)

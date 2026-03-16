@@ -14,10 +14,12 @@ from gui.modern_style import ModernStyle
 class OptionsDialog:
     """Dialog for configuring application settings"""
     
-    def __init__(self, parent, config):
+    def __init__(self, parent, config, main_window=None):
         self.parent = parent
         self.config = config
+        self.main_window = main_window
         self.changes_made = False
+        self._service_changed = False
         
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("Options")
@@ -80,8 +82,24 @@ class OptionsDialog:
         # Calculate and set dynamic height after all content is added
         self.dialog.after(1, self._set_dynamic_height)
     
+    def _on_service_selection_changed(self, event=None):
+        """Show/hide MAL credential fields based on selected service."""
+        selected = self.service_var.get()
+        if selected == "MyAnimeList":
+            self.mal_creds_frame.pack(fill=tk.X, pady=(5, 0))
+        else:
+            self.mal_creds_frame.pack_forget()
+        self.dialog.after(10, self._set_dynamic_height)
+
     def _load_current_values(self):
         """Load current configuration values"""
+        # Service selection
+        active_service = self.config.get('service.active', 'shikimori')
+        self.service_var.set("MyAnimeList" if active_service == 'mal' else "Shikimori")
+        self.mal_client_id_var.set(self.config.get('mal.client_id', ''))
+        self.mal_client_secret_var.set(self.config.get('mal.client_secret', ''))
+        self._on_service_selection_changed()
+
         # Check if app is in startup
         self.startup_var.set(self._is_in_startup())
         
@@ -121,7 +139,7 @@ class OptionsDialog:
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
                                 r"Software\Microsoft\Windows\CurrentVersion\Run")
             try:
-                winreg.QueryValueEx(key, "ShikimoriUpdater")
+                winreg.QueryValueEx(key, "AnimeUpdater")
                 winreg.CloseKey(key)
                 return True
             except FileNotFoundError:
@@ -144,7 +162,7 @@ class OptionsDialog:
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
                                 r"Software\Microsoft\Windows\CurrentVersion\Run", 
                                 0, winreg.KEY_SET_VALUE)
-            winreg.SetValueEx(key, "ShikimoriUpdater", 0, winreg.REG_SZ, app_path)
+            winreg.SetValueEx(key, "AnimeUpdater", 0, winreg.REG_SZ, app_path)
             winreg.CloseKey(key)
             return True
         except Exception as e:
@@ -157,7 +175,7 @@ class OptionsDialog:
             key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
                                 r"Software\Microsoft\Windows\CurrentVersion\Run", 
                                 0, winreg.KEY_SET_VALUE)
-            winreg.DeleteValue(key, "ShikimoriUpdater")
+            winreg.DeleteValue(key, "AnimeUpdater")
             winreg.CloseKey(key)
             return True
         except FileNotFoundError:
@@ -170,6 +188,15 @@ class OptionsDialog:
     def _save_changes(self):
         """Save configuration changes"""
         try:
+            # Save service selection and MAL credentials
+            old_service = self.config.get('service.active', 'shikimori')
+            new_service = 'mal' if self.service_var.get() == "MyAnimeList" else 'shikimori'
+            self.config.set('service.active', new_service)
+            self.config.set('mal.client_id', self.mal_client_id_var.get().strip())
+            self.config.set('mal.client_secret', self.mal_client_secret_var.get().strip())
+            if new_service != old_service:
+                self._service_changed = True
+
             # Handle startup setting
             if self.startup_var.get():
                 if not self._is_in_startup():
@@ -210,6 +237,9 @@ class OptionsDialog:
             self.changes_made = True
             messagebox.showinfo("Success", "Settings saved successfully!")
             self.dialog.destroy()
+
+            if self._service_changed and self.main_window:
+                self.main_window.on_service_changed()
             
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save settings: {str(e)}")
@@ -262,6 +292,44 @@ class OptionsDialog:
     
     def _create_main_tab(self):
         """Create main settings tab"""
+        # Anime service selection
+        service_frame = ttk.LabelFrame(self.main_tab, text="Anime Service", padding="10")
+        service_frame.pack(fill=tk.X, pady=(0, 15))
+
+        self.service_var = tk.StringVar()
+        service_row = ttk.Frame(service_frame)
+        service_row.pack(fill=tk.X, pady=(0, 5))
+        ttk.Label(service_row, text="Active service:").pack(side=tk.LEFT, padx=(0, 10))
+        self.service_combo = ttk.Combobox(service_row, textvariable=self.service_var,
+                                          values=["Shikimori", "MyAnimeList"],
+                                          state="readonly", width=18)
+        self.service_combo.pack(side=tk.LEFT)
+        self.service_combo.bind("<<ComboboxSelected>>", self._on_service_selection_changed)
+
+        # MAL credentials (shown only when MAL is selected)
+        self.mal_creds_frame = ttk.LabelFrame(service_frame, text="MyAnimeList API Credentials", padding="8")
+
+        mal_id_row = ttk.Frame(self.mal_creds_frame)
+        mal_id_row.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(mal_id_row, text="Client ID:").pack(anchor=tk.W)
+        self.mal_client_id_var = tk.StringVar()
+        self.mal_client_id_entry = ttk.Entry(mal_id_row, textvariable=self.mal_client_id_var, width=45)
+        self.mal_client_id_entry.pack(fill=tk.X, pady=(2, 0))
+
+        mal_secret_row = ttk.Frame(self.mal_creds_frame)
+        mal_secret_row.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(mal_secret_row, text="Client Secret:").pack(anchor=tk.W)
+        self.mal_client_secret_var = tk.StringVar()
+        self.mal_client_secret_entry = ttk.Entry(mal_secret_row, textvariable=self.mal_client_secret_var,
+                                                  show="*", width=45)
+        self.mal_client_secret_entry.pack(fill=tk.X, pady=(2, 0))
+
+        mal_note = ttk.Label(self.mal_creds_frame,
+                             text="Register an API client at myanimelist.net/apiconfig\n"
+                                  "Set redirect URL to http://localhost:8080/callback",
+                             foreground="gray", font=("Arial", 8), justify=tk.LEFT)
+        mal_note.pack(anchor=tk.W, pady=(4, 0))
+
         # Startup options
         startup_frame = ttk.LabelFrame(self.main_tab, text="Startup Options", padding="10")
         startup_frame.pack(fill=tk.X, pady=(0, 15))

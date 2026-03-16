@@ -1,5 +1,5 @@
 """
-Auto-updater utility for Shikimori Updater
+Auto-updater utility for Anime Updater
 Checks for updates from GitHub releases and handles downloading/installing
 """
 
@@ -51,7 +51,7 @@ class Updater:
             
             # Create request with user agent
             request = urllib.request.Request(self.api_url)
-            request.add_header('User-Agent', 'ShikimoriUpdater/1.0')
+            request.add_header('User-Agent', 'AnimeUpdater/1.0')
             request.add_header('Accept', 'application/vnd.github.v3+json')
             
             # Get latest release info
@@ -69,7 +69,7 @@ class Updater:
             self.release_notes = data.get('body', '')
             
             # Find ZIP archive download URL
-            # Look for pattern: Shikimori_Updater_X.X.X_Windows.zip
+            # Look for pattern: Anime_Updater_X.X.X_Windows.zip
             assets = data.get('assets', [])
             logger.info(f"Found {len(assets)} assets in release")
             
@@ -78,7 +78,8 @@ class Updater:
                 download_url = asset.get('browser_download_url', '')
                 logger.info(f"Asset: {asset_name}, Download URL: {download_url}")
                 
-                if (asset_name.startswith('Shikimori_Updater_') and 
+                if ((asset_name.startswith('Anime_Updater_') or
+                     asset_name.startswith('Shikimori_Updater_')) and
                     asset_name.endswith('_Windows.zip')):
                     if download_url:
                         self.download_url = download_url
@@ -90,7 +91,9 @@ class Updater:
                         
                 # Also try more flexible matching
                 elif (asset_name.endswith('.zip') and 
-                      ('Shikimori' in asset_name or 'ShikimoriUpdater' in asset_name)):
+                      ('Anime_Updater' in asset_name or 'AnimeUpdater' in asset_name or
+                       'Anime Updater' in asset_name or
+                       'Shikimori' in asset_name or 'ShikimoriUpdater' in asset_name)):
                     if download_url:
                         self.download_url = download_url
                         logger.info(f"Found ZIP archive (flexible match): {asset_name}")
@@ -142,7 +145,7 @@ class Updater:
         try:
             # Create temporary file for ZIP download
             temp_dir = tempfile.gettempdir()
-            zip_filename = f"Shikimori_Updater_{self.latest_version}_Windows.zip"
+            zip_filename = f"Anime_Updater_{self.latest_version}_Windows.zip"
             zip_path = os.path.join(temp_dir, zip_filename)
             
             logger.info(f"Downloading update ZIP from {self.download_url}")
@@ -201,10 +204,12 @@ class Updater:
                 
                 # Try to find an existing compiled version in common locations
                 possible_locations = [
+                    os.path.join(os.getcwd(), "Anime Updater.exe"),
+                    os.path.join(os.getcwd(), "dist", "Anime Updater.exe"),
+                    os.path.join(os.getcwd(), "build", "Anime Updater.exe"),
+                    os.path.join(os.path.dirname(os.getcwd()), "Anime Updater.exe"),
                     os.path.join(os.getcwd(), "Shikimori Updater.exe"),
                     os.path.join(os.getcwd(), "dist", "Shikimori Updater.exe"),
-                    os.path.join(os.getcwd(), "build", "Shikimori Updater.exe"),
-                    os.path.join(os.path.dirname(os.getcwd()), "Shikimori Updater.exe")
                 ]
                 
                 current_exe = None
@@ -218,7 +223,7 @@ class Updater:
                     logger.error("Cannot update: No compiled version found and not running from frozen application")
                     logger.error("To test updates, either:")
                     logger.error("  1. Run from a compiled/frozen version of the application")
-                    logger.error("  2. Place a compiled 'Shikimori Updater.exe' in one of these locations:")
+                    logger.error("  2. Place a compiled 'Anime Updater.exe' in one of these locations:")
                     for location in possible_locations:
                         logger.error(f"     - {location}")
                     return False
@@ -280,10 +285,10 @@ class Updater:
             logger.info(f"Extracting main application EXE from ZIP archive")
             
             # Target executable names to look for (main application)
-            target_exe_names = ["Shikimori Updater.exe", "ShikimoriUpdater.exe"]
+            target_exe_names = ["Anime Updater.exe", "AnimeUpdater.exe", "Shikimori Updater.exe", "ShikimoriUpdater.exe"]
             
             # Files to ignore during extraction
-            ignore_files = ["updater.exe", "standalone_updater.exe", "ShikimoriUpdater_Updater.exe"]
+            ignore_files = ["updater.exe", "standalone_updater.exe", "ShikimoriUpdater_Updater.exe", "AnimeUpdater_Updater.exe"]
             
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
                 # List all files in the ZIP
@@ -317,7 +322,7 @@ class Updater:
                     return None
                 
                 # Extract only the main application executable directly to temp
-                final_exe_path = os.path.join(temp_dir, f"ShikimoriUpdater_{self.latest_version}.exe")
+                final_exe_path = os.path.join(temp_dir, f"AnimeUpdater_{self.latest_version}.exe")
                 
                 logger.info(f"Extracting {main_exe_entry} to {final_exe_path}")
                 
@@ -341,13 +346,13 @@ class Updater:
         
         script_content = f'''@echo off
 setlocal enabledelayedexpansion
-set LOG_FILE="%TEMP%\shikimori_update.log"
+set LOG_FILE="%TEMP%\anime_update.log"
 echo %DATE% %TIME% - Starting update script > %LOG_FILE%
 echo %DATE% %TIME% - Current EXE: {current_exe_path} >> %LOG_FILE%
 echo %DATE% %TIME% - New EXE: {new_exe_path} >> %LOG_FILE%
 echo %DATE% %TIME% - EXE Name: {current_exe_name} >> %LOG_FILE%
 
-echo Updating Shikimori Updater...
+echo Updating Anime Updater...
 echo Current EXE: {current_exe_path}
 echo New EXE: {new_exe_path}
 echo EXE Name: {current_exe_name}
@@ -372,7 +377,7 @@ if not exist "{new_exe_path}" (
     echo ERROR: New executable not found at: {new_exe_path}
     echo %DATE% %TIME% - ERROR: New executable not found >> %LOG_FILE%
     echo Available files in temp directory:
-    dir "{os.path.dirname(new_exe_path)}" | find "ShikimoriUpdater"
+    dir "{os.path.dirname(new_exe_path)}" | find "AnimeUpdater"
     pause
     exit /b 1
 )
@@ -430,8 +435,12 @@ for /d %%d in ("%TEMP%\_MEI*") do (
 )
 
 :: Additional cleanup for other temp patterns
+for /d %%d in ("%TEMP%\*Anime*Updater*") do (
+    echo Removing Anime Updater temp directory: %%d
+    rmdir /s /q "%%d" 2>nul
+)
 for /d %%d in ("%TEMP%\*Shikimori*") do (
-    echo Removing Shikimori temp directory: %%d
+    echo Removing legacy temp directory: %%d
     rmdir /s /q "%%d" 2>nul
 )
 
@@ -468,12 +477,12 @@ set PYINSTALLER_ONEFILE_TEMP_PATH=
 :: Create a completely isolated launcher script to break inheritance chain
 echo Creating isolated launcher script...
 echo %DATE% %TIME% - Creating isolated launcher script >> %LOG_FILE%
-set LAUNCHER_SCRIPT="%TEMP%\shikimori_launcher.bat"
+set LAUNCHER_SCRIPT="%TEMP%\anime_launcher.bat"
 
 :: Create the launcher script with maximum isolation
 echo @echo off > %LAUNCHER_SCRIPT%
 echo setlocal >> %LAUNCHER_SCRIPT%
-echo echo Preparing to launch updated Shikimori Updater... >> %LAUNCHER_SCRIPT%
+echo echo Preparing to launch updated Anime Updater... >> %LAUNCHER_SCRIPT%
 echo. >> %LAUNCHER_SCRIPT%
 echo :: Clear all PyInstaller related environment variables >> %LAUNCHER_SCRIPT%
 echo set _MEIPASS= >> %LAUNCHER_SCRIPT%
@@ -497,11 +506,11 @@ echo echo Performing final cleanup... >> %LAUNCHER_SCRIPT%
 echo for /d %%%%d in ("%%TEMP%%\_MEI*"^) do rmdir /s /q "%%%%d" 2^^>nul >> %LAUNCHER_SCRIPT%
 echo. >> %LAUNCHER_SCRIPT%
 echo :: Launch with process isolation using schtasks for complete separation >> %LAUNCHER_SCRIPT%
-echo echo Starting Shikimori Updater with process isolation... >> %LAUNCHER_SCRIPT%
-echo schtasks /create /tn "ShikimoriUpdaterRestart" /tr "\"{current_exe_path}\"" /sc once /st 00:00 /f ^^>nul 2^^>^^&1 >> %LAUNCHER_SCRIPT%
-echo schtasks /run /tn "ShikimoriUpdaterRestart" ^^>nul 2^^>^^&1 >> %LAUNCHER_SCRIPT%
+echo echo Starting Anime Updater with process isolation... >> %LAUNCHER_SCRIPT%
+echo schtasks /create /tn "AnimeUpdaterRestart" /tr "\"{current_exe_path}\"" /sc once /st 00:00 /f ^^>nul 2^^>^^&1 >> %LAUNCHER_SCRIPT%
+echo schtasks /run /tn "AnimeUpdaterRestart" ^^>nul 2^^>^^&1 >> %LAUNCHER_SCRIPT%
 echo timeout /t 2 /nobreak ^^> nul >> %LAUNCHER_SCRIPT%
-echo schtasks /delete /tn "ShikimoriUpdaterRestart" /f ^^>nul 2^^>^^&1 >> %LAUNCHER_SCRIPT%
+echo schtasks /delete /tn "AnimeUpdaterRestart" /f ^^>nul 2^^>^^&1 >> %LAUNCHER_SCRIPT%
 echo. >> %LAUNCHER_SCRIPT%
 echo :: If schtasks failed, try direct launch as fallback >> %LAUNCHER_SCRIPT%
 echo echo Fallback: Direct launch... >> %LAUNCHER_SCRIPT%
@@ -521,7 +530,7 @@ timeout /t 2 /nobreak > nul
 del "%~f0"
 '''
         
-        script_path = os.path.join(tempfile.gettempdir(), "update_shikimori.bat")
+        script_path = os.path.join(tempfile.gettempdir(), "update_anime.bat")
         with open(script_path, 'w', encoding='utf-8') as f:
             f.write(script_content)
         
@@ -544,6 +553,7 @@ del "%~f0"
             possible_updater_locations = [
                 os.path.join(app_dir, "updater.exe"),
                 os.path.join(app_dir, "standalone_updater.exe"),
+                os.path.join(app_dir, "AnimeUpdater_Updater.exe"),
                 os.path.join(app_dir, "ShikimoriUpdater_Updater.exe"),
                 os.path.join(app_dir, "dist", "updater.exe"),
                 os.path.join(app_dir, "dist", "standalone_updater.exe"),

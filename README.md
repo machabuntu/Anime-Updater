@@ -94,7 +94,7 @@ pyinstaller "Shikimori Updater.spec"
 
 ### 1. Create Shikimori API Application
 
-1. Visit [Shikimori OAuth Applications](https://shikimori.one/oauth/applications)
+1. Visit [Shikimori OAuth Applications](https://shikimori.io/oauth/applications)
 2. Click **"New Application"**
 3. Configure your application:
    - **Name:** `Shikimori Updater` (or your preferred name)
@@ -283,7 +283,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 🙏 Acknowledgments
 
-- **[Shikimori](https://shikimori.one)** - Excellent anime database and API
+- **[Shikimori](https://shikimori.io)** - Excellent anime database and API
 - **[PotPlayer](https://potplayer.daum.net)** - Fantastic media player for anime
 - **The Anime Community** - Inspiration and feedback
 - **Contributors** - Everyone who helped improve this project

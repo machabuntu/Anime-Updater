@@ -121,7 +121,7 @@ class AnimeScrobbleHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         """Handle GET requests for status check"""
         if self.path == '/api/status':
-            self.send_success_response({"status": "running", "message": "Shikimori Updater API is running"})
+            self.send_success_response({"status": "running", "message": "Anime Updater API is running"})
         else:
             self.send_error_response(404, "Not found")
     

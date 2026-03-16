@@ -85,7 +85,7 @@ def main():
     print(f"  python {os.path.join(os.path.dirname(__file__), 'main.py')}")
     print("\nFor first-time setup:")
     print("1. Create a Shikimori API application at:")
-    print("   https://shikimori.one/oauth/applications")
+    print("   https://shikimori.io/oauth/applications")
     print("2. Use redirect URI: http://localhost:8080/callback")
     print("3. Grant 'user_rates' scope")
     print("4. Run the application and follow the authentication steps")

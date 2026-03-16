@@ -1,5 +1,5 @@
 """
-Main GUI Window for Shikimori Updater
+Main GUI Window for Anime Updater
 """
 
 import tkinter as tk
@@ -29,6 +29,7 @@ except Exception as e:
     TRAY_AVAILABLE = False
 
 from api.shikimori_client import ShikimoriClient
+from api.mal_client import MALClient
 from api.api_server import APIServer
 from utils.player_monitor import PlayerMonitor, EpisodeInfo
 from utils.anime_matcher import AnimeMatcher
@@ -52,15 +53,15 @@ class MainWindow:
         self.root = root
         self.config = config
         self.logger = get_logger('main_window')
-        self.shikimori = ShikimoriClient(config)
+        self.api_client = self._create_active_client(config)
         self.player_monitor = PlayerMonitor(config)
         self.cache_manager = CacheManager(config)
         # Use enhanced matcher with synonym support
-        self.anime_matcher = EnhancedAnimeMatcher(self.shikimori, self.cache_manager)
+        self.anime_matcher = EnhancedAnimeMatcher(self.api_client, self.cache_manager)
         
         # Initialize notification manager
         from utils.notification_manager import NotificationManager
-        self.notification_manager = NotificationManager(config, self.shikimori, self.cache_manager)
+        self.notification_manager = NotificationManager(config, self.api_client, self.cache_manager)
         
         # Initialize Telegram notifier
         from utils.telegram_notifier import TelegramNotifier
@@ -208,10 +209,10 @@ class MainWindow:
                                 else:
                                     self.logger.info(f"Anime finished but no score set, keeping status as {current_status}")
                             
-                            # Update on Shikimori
-                            self.logger.info(f"Updating Shikimori: {anime_name} -> Episode {target_episode}" + 
+                            # Update on the active service
+                            self.logger.info(f"Updating anime progress: {anime_name} -> Episode {target_episode}" + 
                                             (f", Status: {new_status}" if new_status else ""))
-                            success = self.shikimori.update_anime_progress(
+                            success = self.api_client.update_anime_progress(
                                 rate_id, target_episode, status=new_status)
                             
                             if success:
@@ -222,7 +223,7 @@ class MainWindow:
                                 elif current_status == 'planned' and new_status == 'watching':
                                     message += " (Moved to Watching)"
                                 
-                                self.logger.info(f"Shikimori update successful: {message}")
+                                self.logger.info(f"Anime progress update successful: {message}")
                                 self.root.after(0, lambda: self._set_status(message))
                                 # Mark this episode as updated
                                 self.updated_anime_episodes.add(anime_episode_key)
@@ -269,7 +270,7 @@ class MainWindow:
                                 self.root.after(0, lambda: self._update_single_anime(anime_entry))
                             else:
                                 error_msg = f"Failed to update {title}"
-                                self.logger.error(f"Shikimori update failed: {error_msg}")
+                                self.logger.error(f"Anime progress update failed: {error_msg}")
                                 self.root.after(0, lambda: self._set_status(error_msg))
                         else:
                             warn_msg = f"Episode {target_episode} is not next for {title} (current: {current_episodes})"
@@ -359,7 +360,7 @@ class MainWindow:
     
     def _setup_window(self):
         """Setup main window properties"""
-        self.root.title("Shikimori Updater - Not logged in")
+        self.root.title("Anime Updater - Not logged in")
         
         # Set window icon
         self._set_window_icon()
@@ -641,7 +642,7 @@ class MainWindow:
 
         self.compact_status_var = tk.StringVar(value="-")
         self.compact_status_combo = ttk.Combobox(status_frame, textvariable=self.compact_status_var,
-                                                values=["-"] + list(self.shikimori.STATUSES.values()),
+                                                values=["-"] + list(self.api_client.STATUSES.values()),
                                                 width=12, state="readonly")
         self.compact_status_combo.pack(side=tk.LEFT)
         self.compact_status_combo.bind('<<ComboboxSelected>>', self._on_compact_status_changed)
@@ -804,12 +805,13 @@ class MainWindow:
         if self.config.is_authenticated:
             # Already authenticated, offer to logout
             self.logger.info("User requested logout (already authenticated)")
-            if messagebox.askyesno("Logout", "Do you want to logout from Shikimori?"):
+            service_name = self.api_client.SERVICE_NAME
+            if messagebox.askyesno("Logout", f"Do you want to logout from {service_name}?"):
                 self._logout()
         else:
             # Show authentication dialog
             self.logger.info("User requested authentication")
-            auth_dialog = SimpleAuthDialog(self.root, self.config, self.shikimori)
+            auth_dialog = SimpleAuthDialog(self.root, self.config, self.api_client)
             self.root.wait_window(auth_dialog.dialog)
             
             if self.config.is_authenticated:
@@ -819,13 +821,14 @@ class MainWindow:
                 self.logger.info("Authentication cancelled or failed")
     
     def _logout(self):
-        """Logout from Shikimori"""
+        """Logout from the active service"""
         username = self.current_user.get('nickname', 'Unknown') if self.current_user else 'Unknown'
         self.logger.info(f"Logging out user: {username}")
         
-        self.config.set('shikimori.access_token', None)
-        self.config.set('shikimori.refresh_token', None)
-        self.config.set('shikimori.user_id', None)
+        service = self.config.active_service
+        self.config.set(f'{service}.access_token', None)
+        self.config.set(f'{service}.refresh_token', None)
+        self.config.set(f'{service}.user_id', None)
         
         # Stop periodic updater
         self.anime_matcher.stop_periodic_updater()
@@ -840,7 +843,7 @@ class MainWindow:
         self.logger.info("Logout completed successfully")
     
     def _load_user_data(self):
-        """Load user data from Shikimori"""
+        """Load user data from the active service"""
         self.logger.info("Starting user data loading process")
         
         def load_data():
@@ -848,10 +851,10 @@ class MainWindow:
                 self._set_status("Loading user data...")
                 
                 # Get current user
-                self.logger.info("Fetching current user information from Shikimori")
-                self.current_user = self.shikimori.get_current_user()
+                self.logger.info(f"Fetching current user information from {self.api_client.SERVICE_NAME}")
+                self.current_user = self.api_client.get_current_user()
                 if not self.current_user:
-                    self.logger.error("Failed to get user information from Shikimori API")
+                    self.logger.error(f"Failed to get user information from {self.api_client.SERVICE_NAME} API")
                     messagebox.showerror("Error", "Failed to get user information")
                     return
                 
@@ -880,10 +883,10 @@ class MainWindow:
         threading.Thread(target=load_data, daemon=True).start()
     
     def _refresh_list(self, force_refresh: bool = False):
-        """Refresh anime list from Shikimori"""
+        """Refresh anime list from the active service"""
         if not self.config.is_authenticated:
             self.logger.warning("Attempted to refresh anime list without authentication")
-            messagebox.showwarning("Warning", "Please login to Shikimori first")
+            messagebox.showwarning("Warning", "Please login first")
             return
         
         refresh_type = "forced" if force_refresh else "normal"
@@ -957,16 +960,16 @@ class MainWindow:
                 return
         
         # Load from API if no cache or forced refresh
-        self.root.after(0, lambda: self._set_status("Refreshing anime list from Shikimori..."))
+        self.root.after(0, lambda: self._set_status("Refreshing anime list..."))
         
         total_anime = 0
         
         # Load all statuses
-        for i, status_key in enumerate(self.shikimori.STATUSES.keys()):
-            status_display = self.shikimori.STATUSES[status_key]
+        for i, status_key in enumerate(self.api_client.STATUSES.keys()):
+            status_display = self.api_client.STATUSES[status_key]
             self.root.after(0, lambda s=status_display: self._set_status(f"Loading {s} anime..."))
             
-            anime_list = self.shikimori.get_user_anime_list(user_id, status_key)
+            anime_list = self.api_client.get_user_anime_list(user_id, status_key)
             self.anime_list_data[status_key] = anime_list
             total_anime += len(anime_list)
             
@@ -1001,16 +1004,17 @@ class MainWindow:
     
     def _update_window_title(self):
         """Update window title with user and monitoring status"""
-        base_title = "Shikimori Updater"
+        base_title = "Anime Updater"
+        service_name = self.api_client.SERVICE_NAME
         
         if self.current_user:
             username = self.current_user.get('nickname', 'Unknown')
             scrobbling_status = "Active" if self.monitoring_active else "Passive"
             version = get_version_info()['version']
-            title = f"{base_title} - Logged as {username} - Scrobbling {scrobbling_status} - v{version}"
+            title = f"{base_title} ({service_name}) - Logged as {username} - Scrobbling {scrobbling_status} - v{version}"
         else:
             version = get_version_info()['version']
-            title = f"{base_title} - Not logged in - v{version}"
+            title = f"{base_title} ({service_name}) - Not logged in - v{version}"
         
         self.root.title(title)
     
@@ -1018,7 +1022,7 @@ class MainWindow:
         """Toggle player monitoring"""
         if not self.config.is_authenticated:
             self.logger.warning("Attempted to toggle monitoring without authentication")
-            messagebox.showwarning("Warning", "Please login to Shikimori first")
+            messagebox.showwarning("Warning", "Please login first")
             return
         
         if self.monitoring_active:
@@ -1130,10 +1134,10 @@ class MainWindow:
                             else:
                                 self.logger.info(f"Anime finished but no score set, keeping status as {current_status}")
                         
-                        # Update on Shikimori
-                        self.logger.info(f"Updating Shikimori: {anime_name} -> Episode {target_episode}" + 
+                        # Update on the active service
+                        self.logger.info(f"Updating anime progress: {anime_name} -> Episode {target_episode}" + 
                                        (f", Status: {new_status}" if new_status else ""))
-                        success = self.shikimori.update_anime_progress(
+                        success = self.api_client.update_anime_progress(
                             rate_id, target_episode, status=new_status)
                         
                         if success:
@@ -1144,7 +1148,7 @@ class MainWindow:
                             elif current_status == 'planned' and new_status == 'watching':
                                 message += " (Moved to Watching)"
                             
-                            self.logger.info(f"Shikimori update successful: {message}")
+                            self.logger.info(f"Anime progress update successful: {message}")
                             self.root.after(0, lambda: self._set_status(message))
                             # Mark this episode as updated
                             self.updated_anime_episodes.add(episode_key)
@@ -1191,7 +1195,7 @@ class MainWindow:
                             self.root.after(0, lambda: self._update_single_anime(anime_entry))
                         else:
                             error_msg = f"Failed to update {episode_info.anime_name}"
-                            self.logger.error(f"Shikimori update failed: {error_msg}")
+                            self.logger.error(f"Anime progress update failed: {error_msg}")
                             self.root.after(0, lambda: self._set_status(error_msg))
                     else:
                         warn_msg = f"Episode {target_episode} is not next for {episode_info.anime_name} (current: {current_episodes})"
@@ -1289,11 +1293,43 @@ class MainWindow:
         
         self.root.destroy()
     
+    @staticmethod
+    def _create_active_client(config):
+        """Factory: return the appropriate API client based on config."""
+        service = config.get('service.active', 'shikimori')
+        if service == 'mal':
+            return MALClient(config)
+        return ShikimoriClient(config)
+
     # Public methods for other components
-    def get_shikimori_client(self) -> ShikimoriClient:
-        """Get Shikimori client instance"""
-        return self.shikimori
-    
+    def get_active_client(self):
+        """Get the currently active API client instance"""
+        return self.api_client
+
+    def get_shikimori_client(self):
+        """Legacy alias -- returns the active client regardless of service."""
+        return self.api_client
+
+    def on_service_changed(self):
+        """Called after the active service has been switched in config.
+        Re-creates the API client and reloads data if authenticated."""
+        self.api_client = self._create_active_client(self.config)
+        self.anime_matcher = EnhancedAnimeMatcher(self.api_client, self.cache_manager)
+        from utils.notification_manager import NotificationManager
+        self.notification_manager = NotificationManager(self.config, self.api_client, self.cache_manager)
+
+        self.current_user = None
+        self.anime_list_data.clear()
+        self.manga_list_data.clear()
+        self.anime_list_frame.clear_list()
+        self.manga_list_frame.clear_list()
+
+        if self.config.is_authenticated:
+            self._load_user_data()
+
+        self._update_window_title()
+        self._set_status(f"Switched to {self.api_client.SERVICE_NAME}")
+
     def get_anime_list_data(self) -> Dict[str, List[Dict[str, Any]]]:
         """Get current anime list data"""
         return self.anime_list_data
@@ -1335,7 +1371,7 @@ class MainWindow:
             
             # Second row: Status and Score
             status = anime_entry.get('status', '')
-            status_display = self.shikimori.STATUSES.get(status, 'Unknown') if status in self.shikimori.STATUSES else 'Unknown'
+            status_display = self.api_client.STATUSES.get(status, 'Unknown') if status in self.api_client.STATUSES else 'Unknown'
             score = anime_entry.get('score', 0)
             score_display = str(score) if score > 0 else 'Not scored'
             status_score_info = f"Status: {status_display} | Score: {score_display}"
@@ -1351,8 +1387,8 @@ class MainWindow:
             
             # Update status in compact panel
             status = anime_entry.get('status', '')
-            if status in self.shikimori.STATUSES:
-                status_display = self.shikimori.STATUSES[status]
+            if status in self.api_client.STATUSES:
+                status_display = self.api_client.STATUSES[status]
                 self.compact_status_var.set(status_display)
             else:
                 self.compact_status_var.set("-")
@@ -1438,14 +1474,14 @@ class MainWindow:
             self.episode_editing_original_value = None
     
     def _update_progress(self, episodes: int):
-        """Update anime progress on Shikimori"""
+        """Update anime progress on the active service"""
         if not self.selected_anime:
             return
         
         self._update_progress_for_anime(self.selected_anime, episodes)
     
     def _update_progress_for_anime(self, anime_entry: Dict[str, Any], episodes: int):
-        """Update anime progress on Shikimori for specific anime"""
+        """Update anime progress on the active service for specific anime"""
         if not anime_entry:
             return
         
@@ -1478,7 +1514,7 @@ class MainWindow:
                     current_rewatches = anime_entry.get('rewatches', 0) or 0
                     additional_fields['rewatches'] = current_rewatches + rewatches_increment
                 
-                success = self.shikimori.update_anime_progress(
+                success = self.api_client.update_anime_progress(
                     rate_id, episodes=episodes, status=new_status, **additional_fields)
                 
                 if success:
@@ -1530,7 +1566,7 @@ class MainWindow:
         threading.Thread(target=update_data, daemon=True).start()
     
     def _update_score(self, score: int):
-        """Update anime score on Shikimori"""
+        """Update anime score on the active service"""
         if not self.selected_anime:
             return
         
@@ -1549,7 +1585,7 @@ class MainWindow:
                 if score > 0 and total_episodes > 0 and current_episodes >= total_episodes and current_status != 'completed':
                     new_status = 'completed'
                 
-                success = self.shikimori.update_anime_progress(
+                success = self.api_client.update_anime_progress(
                     rate_id, episodes=current_episodes, score=score, status=new_status)
                 
                 if success:
@@ -1696,14 +1732,14 @@ class MainWindow:
             return
         
         # Convert status display back to API key
-        status_map = {v: k for k, v in self.shikimori.STATUSES.items()}
+        status_map = {v: k for k, v in self.api_client.STATUSES.items()}
         new_status_key = status_map.get(status_text)
         
         if new_status_key:
             self._update_status(new_status_key)
     
     def _update_status(self, status: str):
-        """Update anime status on Shikimori"""
+        """Update anime status on the active service"""
         if not self.selected_anime:
             return
         
@@ -1717,11 +1753,11 @@ class MainWindow:
                 if status == 'rewatching':
                     episodes_to_update = 0  # Set episodes to 0 when changing to Rewatching
                 
-                success = self.shikimori.update_anime_progress(
+                success = self.api_client.update_anime_progress(
                     rate_id, episodes=episodes_to_update, status=status)
                 
                 if success:
-                    status_display = self.shikimori.STATUSES.get(status, status)
+                    status_display = self.api_client.STATUSES.get(status, status)
                     message = f"Changed {anime_name} status to {status_display}"
                     if status == 'rewatching':
                         message += " (episodes reset to 0)"
@@ -1731,7 +1767,7 @@ class MainWindow:
                     if self.current_user:
                         username = self.current_user.get('nickname', 'Unknown')
                         old_status = self.selected_anime.get('status', '')
-                        old_status_display = self.shikimori.STATUSES.get(old_status, old_status)
+                        old_status_display = self.api_client.STATUSES.get(old_status, old_status)
                         score = self.selected_anime.get('score', 0)
                         anime_url = self.selected_anime['anime'].get('url', '')
                         
@@ -1763,8 +1799,8 @@ class MainWindow:
                     self.root.after(0, lambda: self._set_status(f"Failed to update {anime_name} status"))
                     # Reset to previous value
                     prev_status = self.selected_anime.get('status', '')
-                    if prev_status in self.shikimori.STATUSES:
-                        prev_status_display = self.shikimori.STATUSES[prev_status]
+                    if prev_status in self.api_client.STATUSES:
+                        prev_status_display = self.api_client.STATUSES[prev_status]
                         self.root.after(0, lambda: self.compact_status_var.set(prev_status_display))
                     else:
                         self.root.after(0, lambda: self.compact_status_var.set("-"))
@@ -1838,10 +1874,10 @@ class MainWindow:
                     text_height = bbox[3] - bbox[1]
                     x = (32 - text_width) // 2
                     y = (32 - text_height) // 2 - 2
-                    draw.text((x, y), 'S', fill='white', font=font)
+                    draw.text((x, y), 'A', fill='white', font=font)
                 except:
                     # Fallback to simple text without font
-                    draw.text((10, 8), 'S', fill='white')
+                    draw.text((10, 8), 'A', fill='white')
             
             # Create tray menu
             menu = pystray.Menu(
@@ -1855,9 +1891,9 @@ class MainWindow:
             
             # Create tray icon with double-click handler
             self.tray_icon = pystray.Icon(
-                "Shikimori Updater",
+                "Anime Updater",
                 image,
-                "Shikimori Updater - Double-click to show",
+                "Anime Updater - Double-click to show",
                 menu
             )
             
@@ -1986,7 +2022,7 @@ class MainWindow:
     
     def _show_options(self):
         """Show options dialog"""
-        options_dialog = OptionsDialog(self.root, self.config)
+        options_dialog = OptionsDialog(self.root, self.config, main_window=self)
         self.root.wait_window(options_dialog.dialog)
         
         if options_dialog.changes_made:
@@ -2249,8 +2285,8 @@ class MainWindow:
             
             # Update status in compact panel
             status = manga_entry.get('status', '')
-            if status in self.shikimori.MANGA_STATUSES:
-                status_display = self.shikimori.MANGA_STATUSES[status]
+            if status in self.api_client.MANGA_STATUSES:
+                status_display = self.api_client.MANGA_STATUSES[status]
                 self.compact_status_var.set(status_display)
             else:
                 self.compact_status_var.set("-")
@@ -2274,9 +2310,9 @@ class MainWindow:
             self._set_compact_controls_enabled(False)
     
     def _refresh_manga_list(self, force_refresh: bool = False):
-        """Refresh manga list from Shikimori"""
+        """Refresh manga list from the active service"""
         if not self.config.is_authenticated:
-            messagebox.showwarning("Warning", "Please login to Shikimori first")
+            messagebox.showwarning("Warning", "Please login first")
             return
         
         def refresh_data():
@@ -2310,16 +2346,16 @@ class MainWindow:
                 return
         
         # Load from API if no cache or forced refresh
-        self.root.after(0, lambda: self._set_status("Refreshing manga list from Shikimori..."))
+        self.root.after(0, lambda: self._set_status("Refreshing manga list..."))
         
         total_manga = 0
         
         # Load all statuses (no rewatching status for manga)
-        for i, status_key in enumerate(self.shikimori.MANGA_STATUSES.keys()):
-            status_display = self.shikimori.MANGA_STATUSES[status_key]
+        for i, status_key in enumerate(self.api_client.MANGA_STATUSES.keys()):
+            status_display = self.api_client.MANGA_STATUSES[status_key]
             self.root.after(0, lambda s=status_display: self._set_status(f"Loading {s} manga..."))
             
-            manga_list = self.shikimori.get_user_manga_list(user_id, status_key)
+            manga_list = self.api_client.get_user_manga_list(user_id, status_key)
             self.manga_list_data[status_key] = manga_list
             total_manga += len(manga_list)
             
@@ -2406,7 +2442,7 @@ class MainWindow:
         self.compact_total_volumes_var.set(f"/{total_volumes if total_volumes else '?'}")
         
         # Update status combo values for manga
-        self.compact_status_combo.config(values=["-"] + list(self.shikimori.MANGA_STATUSES.values()))
+        self.compact_status_combo.config(values=["-"] + list(self.api_client.MANGA_STATUSES.values()))
     
     def _switch_to_anime_mode(self):
         """Switch UI to anime mode - hide volumes, show episodes"""
@@ -2429,7 +2465,7 @@ class MainWindow:
         self.compact_total_volumes_var.set("/?")
         
         # Update status combo values for anime
-        self.compact_status_combo.config(values=["-"] + list(self.shikimori.STATUSES.values()))
+        self.compact_status_combo.config(values=["-"] + list(self.api_client.STATUSES.values()))
     
     def _compact_decrease_progress(self):
         """Decrease progress by 1 (episodes for anime, chapters for manga)"""
@@ -2521,7 +2557,7 @@ class MainWindow:
             self.compact_volume_var.set(str(current))
     
     def _update_manga_chapters(self, chapters: int):
-        """Update manga chapter progress on Shikimori"""
+        """Update manga chapter progress on the active service"""
         if not self.selected_manga:
             return
         
@@ -2530,7 +2566,7 @@ class MainWindow:
                 rate_id = self.selected_manga['id']
                 manga_name = self.selected_manga['manga'].get('name', 'Unknown')
                 
-                success = self.shikimori.update_manga_progress(
+                success = self.api_client.update_manga_progress(
                     rate_id, chapters=chapters)
                 
                 if success:
@@ -2554,7 +2590,7 @@ class MainWindow:
         threading.Thread(target=update_data, daemon=True).start()
     
     def _update_manga_volumes(self, volumes: int):
-        """Update manga volume progress on Shikimori"""
+        """Update manga volume progress on the active service"""
         if not self.selected_manga:
             return
         
@@ -2563,7 +2599,7 @@ class MainWindow:
                 rate_id = self.selected_manga['id']
                 manga_name = self.selected_manga['manga'].get('name', 'Unknown')
                 
-                success = self.shikimori.update_manga_progress(
+                success = self.api_client.update_manga_progress(
                     rate_id, volumes=volumes)
                 
                 if success:

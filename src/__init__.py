@@ -1,1 +1,1 @@
-# Shikimori Updater Package
+# Anime Updater Package
