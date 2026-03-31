@@ -244,6 +244,53 @@ class ShikimoriClient:
         except Exception:
             return None
     
+    def get_seasonal_anime(self, year: int, season: str, sort: str = 'ranked',
+                           limit: int = 50, page: int = 1, kind: str = None,
+                           status: str = None, mylist: str = None) -> List[Dict[str, Any]]:
+        """Get anime for a specific season.
+
+        ``season`` should be one of: winter, spring, summer, fall.
+        The value is mapped to Shikimori's format ``{season}_{year}``.
+        """
+        try:
+            season_param = f"{season}_{year}"
+            params: Dict[str, Any] = {
+                'season': season_param,
+                'order': sort,
+                'limit': limit,
+                'page': page,
+                'censored': 'true',
+            }
+            if kind:
+                params['kind'] = kind
+            if status:
+                params['status'] = status
+            if mylist:
+                params['mylist'] = mylist
+
+            all_anime: List[Dict[str, Any]] = []
+            while True:
+                self._wait_for_api_rate_limit()
+                response = self._make_request('GET', '/animes', params=params)
+                if response.status_code != 200:
+                    self.logger.error(f"Seasonal anime fetch failed: HTTP {response.status_code}")
+                    break
+
+                page_data = response.json()
+                if not isinstance(page_data, list) or not page_data:
+                    break
+
+                all_anime.extend(page_data)
+                if len(page_data) < limit:
+                    break
+                params['page'] = params.get('page', 1) + 1
+
+            self.logger.info(f"Fetched {len(all_anime)} seasonal anime for {season_param}")
+            return all_anime
+        except Exception as e:
+            self.logger.error(f"Error fetching seasonal anime: {e}")
+            return []
+
     def search_anime(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
         """Search for anime by name"""
         try:

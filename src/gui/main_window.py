@@ -38,6 +38,7 @@ from gui.simple_auth_dialog import SimpleAuthDialog
 from gui.anime_list_frame import AnimeListFrame
 from gui.manga_list_frame import MangaListFrame
 from gui.search_frame import SearchFrame
+from gui.seasonal_frame import SeasonalFrame
 from gui.options_dialog import OptionsDialog
 from gui.modern_style import ModernStyle
 from core.cache import CacheManager
@@ -793,7 +794,11 @@ class MainWindow:
         # Search tab
         self.search_frame = SearchFrame(self.notebook, self)
         self.notebook.add(self.search_frame, text="Search & Add")
-    
+
+        # Seasonal Anime tab
+        self.seasonal_frame = SeasonalFrame(self.notebook, self)
+        self.notebook.add(self.seasonal_frame, text="Seasonal Anime")
+
     def _setup_monitoring(self):
         """Setup player monitoring callbacks"""
         self.player_monitor.on_episode_detected = self._on_episode_detected

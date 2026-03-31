@@ -438,6 +438,85 @@ class MALClient:
         except Exception:
             return None
 
+    SEASONAL_FIELDS = (
+        "id,title,main_picture,alternative_titles,start_date,end_date,"
+        "mean,rank,popularity,num_list_users,media_type,status,"
+        "num_episodes,start_season,genres,rating"
+    )
+
+    def get_seasonal_anime(self, year: int, season: str, sort: str = 'anime_num_list_users',
+                           limit: int = 100, offset: int = 0) -> List[Dict[str, Any]]:
+        """Get anime for a specific season from MAL.
+
+        ``season`` should be one of: winter, spring, summer, fall.
+        Returns normalized Shikimori-compatible dicts.
+        """
+        try:
+            all_anime: List[Dict[str, Any]] = []
+            while True:
+                self._wait_for_api_rate_limit()
+                params: Dict[str, Any] = {
+                    'sort': sort,
+                    'limit': min(limit, 500),
+                    'offset': offset,
+                    'fields': self.SEASONAL_FIELDS,
+                    'nsfw': 'true',
+                }
+                response = self._make_request(
+                    'GET', f'/anime/season/{year}/{season}', params=params)
+
+                if response.status_code != 200:
+                    self.logger.error(
+                        f"MAL seasonal anime fetch failed: HTTP {response.status_code}")
+                    break
+
+                data = response.json()
+                page_data = data.get('data', [])
+                if not page_data:
+                    break
+
+                for entry in page_data:
+                    normalized = self._normalize_seasonal_anime(entry)
+                    if normalized:
+                        all_anime.append(normalized)
+
+                next_url = (data.get('paging') or {}).get('next')
+                if not next_url or len(page_data) < limit:
+                    break
+                offset += len(page_data)
+
+            self.logger.info(f"Fetched {len(all_anime)} seasonal anime from MAL for {season} {year}")
+            return all_anime
+        except Exception as e:
+            self.logger.error(f"Error fetching MAL seasonal anime: {e}")
+            return []
+
+    def _normalize_seasonal_anime(self, mal_entry: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Normalize a MAL seasonal anime entry to Shikimori-like format."""
+        node = mal_entry.get('node', mal_entry)
+        if not node:
+            return None
+        anime_id = node.get('id', 0)
+        aired_on = node.get('start_date', '') or ''
+        mean = node.get('mean', 0) or 0
+        return {
+            'id': anime_id,
+            'name': node.get('title', 'Unknown'),
+            'russian': '',
+            'url': f"/anime/{anime_id}",
+            'episodes': node.get('num_episodes', 0),
+            'episodes_aired': 0,
+            'kind': node.get('media_type', ''),
+            'aired_on': aired_on,
+            'status': node.get('status', ''),
+            'score': str(mean) if mean else '0',
+            'image': node.get('main_picture', {}),
+            'popularity': node.get('popularity', 0),
+            'num_list_users': node.get('num_list_users', 0),
+            'rating': node.get('rating', ''),
+            'genres': [g.get('name', '') for g in (node.get('genres') or [])],
+        }
+
     def search_anime(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
         try:
             self._wait_for_api_rate_limit()
