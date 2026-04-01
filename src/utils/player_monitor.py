@@ -4,6 +4,8 @@ Monitors media players (especially PotPlayer) for opened anime episodes
 """
 
 import psutil
+import subprocess
+import sys
 import time
 import re
 import threading
@@ -28,12 +30,20 @@ class EpisodeInfo:
     season_number: Optional[int] = None
     original_filename: str = ""
 
+_LINUX_DEFAULT_PLAYERS = {"mpv", "celluloid"}
+_WIN_DEFAULT_PLAYERS = {"PotPlayerMini64.exe", "PotPlayerMini.exe",
+                        "PotPlayer64.exe", "PotPlayer.exe"}
+
+
 class PlayerMonitor:
     """Monitor media players for anime episodes"""
     
     def __init__(self, config):
         self.config = config
-        self.supported_players = config.get('monitoring.supported_players', [])
+        configured = config.get('monitoring.supported_players', [])
+        defaults = _LINUX_DEFAULT_PLAYERS if sys.platform != "win32" else _WIN_DEFAULT_PLAYERS
+        merged = list(dict.fromkeys(configured + list(defaults)))
+        self.supported_players = merged
         self.check_interval = config.get('monitoring.check_interval', 5)
         self.min_watch_time = config.get('monitoring.min_watch_time', 60)
         
@@ -160,8 +170,9 @@ class PlayerMonitor:
         if not cmdline or len(cmdline) < 2:
             return None
         
-        # Look for file paths in command line
-        for arg in cmdline[1:]:  # Skip executable name
+        for arg in cmdline[1:]:
+            if arg == '--' or arg.startswith('-'):
+                continue
             if self._is_video_file(arg) and Path(arg).exists():
                 return arg
         
@@ -180,11 +191,16 @@ class PlayerMonitor:
             return False
     
     def _get_window_title(self, pid: int) -> Optional[str]:
-        """Get window title for process (Windows-specific implementation)"""
+        """Get window title for a process (cross-platform)."""
+        if sys.platform == "win32":
+            return self._get_window_title_win32(pid)
+        return self._get_window_title_linux(pid)
+
+    def _get_window_title_win32(self, pid: int) -> Optional[str]:
         try:
             import win32gui
             import win32process
-            
+
             def enum_windows_callback(hwnd, windows):
                 if win32gui.IsWindowVisible(hwnd):
                     _, window_pid = win32process.GetWindowThreadProcessId(hwnd)
@@ -193,16 +209,60 @@ class PlayerMonitor:
                         if title:
                             windows.append(title)
                 return True
-            
+
             windows = []
             win32gui.EnumWindows(enum_windows_callback, windows)
             return windows[0] if windows else None
-            
         except ImportError:
-            # Fallback if win32gui is not available
             return None
-        except:
+        except Exception:
             return None
+
+    def _get_window_title_linux(self, pid: int) -> Optional[str]:
+        title = self._get_window_title_xdotool(pid)
+        if title:
+            return title
+        return self._get_window_title_xprop(pid)
+
+    def _get_window_title_xdotool(self, pid: int) -> Optional[str]:
+        try:
+            wid_output = subprocess.check_output(
+                ["xdotool", "search", "--pid", str(pid)],
+                stderr=subprocess.DEVNULL, timeout=3,
+            ).decode().strip()
+            if not wid_output:
+                return None
+            for wid in wid_output.splitlines():
+                title = subprocess.check_output(
+                    ["xdotool", "getwindowname", wid],
+                    stderr=subprocess.DEVNULL, timeout=3,
+                ).decode().strip()
+                if title:
+                    return title
+        except (FileNotFoundError, subprocess.CalledProcessError,
+                subprocess.TimeoutExpired):
+            pass
+        except Exception:
+            pass
+        return None
+
+    def _get_window_title_xprop(self, pid: int) -> Optional[str]:
+        """Fallback using xprop + wmctrl when xdotool is unavailable."""
+        try:
+            wmctrl_out = subprocess.check_output(
+                ["wmctrl", "-lp"],
+                stderr=subprocess.DEVNULL, timeout=3,
+            ).decode()
+            for line in wmctrl_out.splitlines():
+                parts = line.split(None, 4)
+                if len(parts) >= 5 and parts[2] == str(pid):
+                    return parts[4]
+        except (FileNotFoundError, subprocess.CalledProcessError,
+                subprocess.TimeoutExpired):
+            pass
+        except Exception:
+            pass
+        return None
     
     def _extract_file_from_title(self, window_title: str) -> Optional[str]:
         """Extract file path from window title"""
@@ -217,8 +277,9 @@ class PlayerMonitor:
         # Remove player suffix (including variants)
         title = window_title
         player_suffixes = [
-            " - PotPlayer", " - PotPlayer Rus", " - VLC media player", 
-            " - Media Player Classic", " - MPC-HC", " - mpv"
+            " - PotPlayer", " - PotPlayer Rus", " - VLC media player",
+            " - Media Player Classic", " - MPC-HC", " - mpv",
+            " - Celluloid",
         ]
         
         for suffix in player_suffixes:
@@ -232,9 +293,10 @@ class PlayerMonitor:
         # Remove progress indicators like "50% - "
         title = re.sub(r'^\d+%\s*-\s*', '', title)
         
-        # Check if it's a full path (Windows path with drive letter or UNC path)
-        if title and (title.startswith('\\\\') or (len(title) > 2 and title[1] == ':')):
-            # It's a full path
+        # Check if it's a full path (Windows or Unix)
+        if title and (title.startswith('\\\\')
+                      or (len(title) > 2 and title[1] == ':')
+                      or title.startswith('/')):
             if Path(title).exists() and self._is_video_file(title):
                 return title
         

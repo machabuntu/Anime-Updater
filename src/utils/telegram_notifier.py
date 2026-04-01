@@ -7,6 +7,7 @@ import threading
 import time
 from typing import Optional, Dict, Any
 from utils.logger import get_logger
+from utils.proxy import get_proxies
 
 class TelegramNotifier:
     """Send anime progress updates to Telegram channel"""
@@ -15,6 +16,7 @@ class TelegramNotifier:
         self.config = config
         self.logger = get_logger('telegram_notifier')
         self.base_url = "https://api.telegram.org/bot{token}/{method}"
+        self._proxies = get_proxies(self.config)
         
     def _get_service_base_url(self) -> str:
         service = self.config.get('service.active', 'shikimori')
@@ -200,7 +202,8 @@ class TelegramNotifier:
         }
         
         try:
-            response = requests.post(url, data=data, timeout=10)
+            response = requests.post(url, data=data, timeout=10,
+                                     proxies=self._proxies)
             response.raise_for_status()
             
             result = response.json()
@@ -225,7 +228,7 @@ class TelegramNotifier:
         url = self.base_url.format(token=bot_token, method='getMe')
         
         try:
-            response = requests.get(url, timeout=10)
+            response = requests.get(url, timeout=10, proxies=self._proxies)
             response.raise_for_status()
             
             result = response.json()

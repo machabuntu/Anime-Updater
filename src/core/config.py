@@ -40,7 +40,11 @@ class Config:
             "monitoring": {
                 "check_interval": 5,  # seconds
                 "min_watch_time": 60,  # seconds
-                "supported_players": ["PotPlayerMini64.exe", "PotPlayerMini.exe", "PotPlayer64.exe", "PotPlayer.exe"]
+                "supported_players": [
+                    "PotPlayerMini64.exe", "PotPlayerMini.exe",
+                    "PotPlayer64.exe", "PotPlayer.exe",
+                    "mpv", "celluloid"
+                ]
             },
             "window": {
                 "width": 1000,
@@ -56,6 +60,13 @@ class Config:
                 "send_completed": True,
                 "send_dropped": False,
                 "send_rewatching": False
+            },
+            "proxy": {
+                "type": "none",
+                "host": "",
+                "port": "",
+                "username": "",
+                "password": ""
             },
             "updates": {
                 "auto_check": True,

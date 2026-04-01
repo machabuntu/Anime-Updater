@@ -21,10 +21,12 @@ class OptionsDialog:
         self.changes_made = False
         self._service_changed = False
         
+        self._dialog_width = 450
+        
         self.dialog = tk.Toplevel(parent)
         self.dialog.title("Options")
-        # Don't set height initially - will be calculated after content is added
-        self.dialog.geometry("450x100")  # Temporary small height
+        self.dialog.geometry(f"{self._dialog_width}x100")
+        self.dialog.minsize(450, 300)
         self.dialog.resizable(False, False)
         
         # Make dialog modal
@@ -46,9 +48,10 @@ class OptionsDialog:
     def _center_dialog(self):
         """Center dialog on parent"""
         self.dialog.update_idletasks()
-        x = self.parent.winfo_rootx() + (self.parent.winfo_width() - 450) // 2
+        w = self._dialog_width
+        x = self.parent.winfo_rootx() + (self.parent.winfo_width() - w) // 2
         y = self.parent.winfo_rooty() + (self.parent.winfo_height() - 400) // 2
-        self.dialog.geometry(f"450x400+{x}+{y}")
+        self.dialog.geometry(f"{w}x400+{x}+{y}")
     
     def _create_widgets(self):
         """Create dialog widgets"""
@@ -69,6 +72,11 @@ class OptionsDialog:
         self.notebook.add(self.notifications_tab, text="Notifications")
         self._create_notifications_tab()
         
+        # Network tab
+        self.network_tab = ttk.Frame(self.notebook)
+        self.notebook.add(self.network_tab, text="Network")
+        self._create_network_tab()
+        
         # Load current values
         self._load_current_values()
         
@@ -79,8 +87,8 @@ class OptionsDialog:
         ttk.Button(buttons_frame, text="Save", command=self._save_changes).pack(side=tk.RIGHT, padx=(10, 0))
         ttk.Button(buttons_frame, text="Cancel", command=self.dialog.destroy).pack(side=tk.RIGHT)
         
-        # Calculate and set dynamic height after all content is added
-        self.dialog.after(1, self._set_dynamic_height)
+        # Calculate and set dynamic size after all content is added
+        self.dialog.after(1, self._set_dynamic_size)
     
     def _on_service_selection_changed(self, event=None):
         """Show/hide MAL credential fields based on selected service."""
@@ -89,7 +97,7 @@ class OptionsDialog:
             self.mal_creds_frame.pack(fill=tk.X, pady=(5, 0))
         else:
             self.mal_creds_frame.pack_forget()
-        self.dialog.after(10, self._set_dynamic_height)
+        self.dialog.after(10, self._set_dynamic_size)
 
     def _load_current_values(self):
         """Load current configuration values"""
@@ -132,12 +140,64 @@ class OptionsDialog:
         
         # Update telegram controls state
         self._toggle_telegram_controls(self.telegram_enabled_var.get())
+        
+        # Proxy settings
+        proxy_type = self.config.get('proxy.type', 'none')
+        type_map = {'none': 'None', 'http': 'HTTP', 'socks5': 'SOCKS5'}
+        self.proxy_type_var.set(type_map.get(proxy_type, 'None'))
+        self.proxy_host_var.set(self.config.get('proxy.host', ''))
+        self.proxy_port_var.set(self.config.get('proxy.port', ''))
+        self.proxy_user_var.set(self.config.get('proxy.username', ''))
+        self.proxy_pass_var.set(self.config.get('proxy.password', ''))
+        self._on_proxy_type_changed()
     
-    def _is_in_startup(self):
-        """Check if application is in Windows startup"""
+    # ── Linux autostart helpers ──────────────────────────────────
+
+    _XDG_AUTOSTART_DIR = Path.home() / ".config" / "autostart"
+    _DESKTOP_FILE = _XDG_AUTOSTART_DIR / "anime-updater.desktop"
+
+    def _linux_exec_path(self) -> str:
+        if getattr(sys, 'frozen', False):
+            return sys.executable
+        return f"{sys.executable} {os.path.abspath('main.py')}"
+
+    def _linux_is_in_startup(self) -> bool:
+        return self._DESKTOP_FILE.exists()
+
+    def _linux_add_to_startup(self) -> bool:
         try:
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
-                                r"Software\Microsoft\Windows\CurrentVersion\Run")
+            self._XDG_AUTOSTART_DIR.mkdir(parents=True, exist_ok=True)
+            self._DESKTOP_FILE.write_text(
+                "[Desktop Entry]\n"
+                "Type=Application\n"
+                "Name=Anime Updater\n"
+                f"Exec={self._linux_exec_path()}\n"
+                "Terminal=false\n"
+                "X-GNOME-Autostart-enabled=true\n",
+                encoding="utf-8",
+            )
+            return True
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to add to startup: {e}")
+            return False
+
+    def _linux_remove_from_startup(self) -> bool:
+        try:
+            if self._DESKTOP_FILE.exists():
+                self._DESKTOP_FILE.unlink()
+            return True
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to remove from startup: {e}")
+            return False
+
+    # ── Windows autostart helpers ─────────────────────────────
+
+    def _win_is_in_startup(self) -> bool:
+        try:
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Run",
+            )
             try:
                 winreg.QueryValueEx(key, "AnimeUpdater")
                 winreg.CloseKey(key)
@@ -147,43 +207,57 @@ class OptionsDialog:
                 return False
         except Exception:
             return False
-    
-    def _add_to_startup(self):
-        """Add application to Windows startup"""
+
+    def _win_add_to_startup(self) -> bool:
         try:
-            # Get path to executable
             if getattr(sys, 'frozen', False):
-                # Running as exe
                 app_path = sys.executable
             else:
-                # Running as script
                 app_path = f'"{sys.executable}" "{os.path.abspath("main.py")}"'
-            
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
-                                r"Software\Microsoft\Windows\CurrentVersion\Run", 
-                                0, winreg.KEY_SET_VALUE)
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Run",
+                0, winreg.KEY_SET_VALUE,
+            )
             winreg.SetValueEx(key, "AnimeUpdater", 0, winreg.REG_SZ, app_path)
             winreg.CloseKey(key)
             return True
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to add to startup: {str(e)}")
+            messagebox.showerror("Error", f"Failed to add to startup: {e}")
             return False
-    
-    def _remove_from_startup(self):
-        """Remove application from Windows startup"""
+
+    def _win_remove_from_startup(self) -> bool:
         try:
-            key = winreg.OpenKey(winreg.HKEY_CURRENT_USER, 
-                                r"Software\Microsoft\Windows\CurrentVersion\Run", 
-                                0, winreg.KEY_SET_VALUE)
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Run",
+                0, winreg.KEY_SET_VALUE,
+            )
             winreg.DeleteValue(key, "AnimeUpdater")
             winreg.CloseKey(key)
             return True
         except FileNotFoundError:
-            # Already not in startup
             return True
         except Exception as e:
-            messagebox.showerror("Error", f"Failed to remove from startup: {str(e)}")
+            messagebox.showerror("Error", f"Failed to remove from startup: {e}")
             return False
+
+    # ── Cross-platform dispatchers ────────────────────────────
+
+    def _is_in_startup(self):
+        if sys.platform == "win32":
+            return self._win_is_in_startup()
+        return self._linux_is_in_startup()
+
+    def _add_to_startup(self):
+        if sys.platform == "win32":
+            return self._win_add_to_startup()
+        return self._linux_add_to_startup()
+
+    def _remove_from_startup(self):
+        if sys.platform == "win32":
+            return self._win_remove_from_startup()
+        return self._linux_remove_from_startup()
     
     def _save_changes(self):
         """Save configuration changes"""
@@ -234,6 +308,14 @@ class OptionsDialog:
             self.config.set('telegram.send_dropped', self.telegram_send_dropped_var.get())
             self.config.set('telegram.send_rewatching', self.telegram_send_rewatching_var.get())
             
+            # Save proxy settings
+            type_map = {'None': 'none', 'HTTP': 'http', 'SOCKS5': 'socks5'}
+            self.config.set('proxy.type', type_map.get(self.proxy_type_var.get(), 'none'))
+            self.config.set('proxy.host', self.proxy_host_var.get().strip())
+            self.config.set('proxy.port', self.proxy_port_var.get().strip())
+            self.config.set('proxy.username', self.proxy_user_var.get().strip())
+            self.config.set('proxy.password', self.proxy_pass_var.get().strip())
+            
             self.changes_made = True
             messagebox.showinfo("Success", "Settings saved successfully!")
             self.dialog.destroy()
@@ -244,50 +326,33 @@ class OptionsDialog:
         except Exception as e:
             messagebox.showerror("Error", f"Failed to save settings: {str(e)}")
     
-    def _set_dynamic_height(self):
-        """Calculate and set dynamic height based on content"""
+    def _set_dynamic_size(self):
+        """Calculate and set dynamic width and height based on content"""
         try:
-            # Update all widgets to get accurate measurements
             self.dialog.update_idletasks()
             
-            # Get the required height of the main frame
-            main_frame = self.dialog.winfo_children()[0]  # First child is main_frame
-            required_height = main_frame.winfo_reqheight() + 40  # Add padding
+            main_frame = self.dialog.winfo_children()[0]
+            required_width = main_frame.winfo_reqwidth() + 40
+            required_height = main_frame.winfo_reqheight() + 40
             
-            # Set minimum height to prevent too small dialogs
-            min_height = 300
-            final_height = max(min_height, required_height)
+            self._dialog_width = max(450, required_width)
+            final_height = max(300, required_height)
             
-            # Get current position
-            current_geometry = self.dialog.geometry()
-            width_pos = current_geometry.split('x')[0]
-            pos_part = current_geometry.split('+')[1:] if '+' in current_geometry else []
-            
-            # Update geometry with new height
-            if pos_part:
-                new_geometry = f"{width_pos}x{final_height}+{'+'.join(pos_part)}"
-            else:
-                new_geometry = f"{width_pos}x{final_height}"
-            
-            self.dialog.geometry(new_geometry)
-            
-            # Re-center the dialog with new height
-            self._center_dialog_with_height(final_height)
+            self.dialog.geometry(f"{self._dialog_width}x{final_height}")
+            self._center_dialog_sized(self._dialog_width, final_height)
             
         except Exception as e:
-            # Fallback to fixed height if calculation fails
-            print(f"Error calculating dynamic height: {e}")
+            print(f"Error calculating dynamic size: {e}")
             self.dialog.geometry("450x500")
     
-    def _center_dialog_with_height(self, height):
-        """Center dialog on parent with specific height"""
+    def _center_dialog_sized(self, width, height):
+        """Center dialog on parent with specific dimensions"""
         try:
             self.dialog.update_idletasks()
-            x = self.parent.winfo_rootx() + (self.parent.winfo_width() - 450) // 2
+            x = self.parent.winfo_rootx() + (self.parent.winfo_width() - width) // 2
             y = self.parent.winfo_rooty() + (self.parent.winfo_height() - height) // 2
-            self.dialog.geometry(f"450x{height}+{x}+{y}")
+            self.dialog.geometry(f"{width}x{height}+{x}+{y}")
         except Exception:
-            # Fallback positioning
             pass
     
     def _create_main_tab(self):
@@ -336,7 +401,7 @@ class OptionsDialog:
         
         # Add to Windows startup
         self.startup_var = tk.BooleanVar()
-        startup_check = ttk.Checkbutton(startup_frame, text="Add application to Windows startup",
+        startup_check = ttk.Checkbutton(startup_frame, text="Add application to startup",
                                        variable=self.startup_var)
         startup_check.pack(anchor=tk.W, pady=(0, 5))
         
@@ -495,6 +560,74 @@ class OptionsDialog:
         # Initially disable telegram controls
         self._toggle_telegram_controls(False)
     
+    def _create_network_tab(self):
+        """Create network/proxy settings tab"""
+        proxy_frame = ttk.LabelFrame(self.network_tab, text="Proxy Settings", padding="10")
+        proxy_frame.pack(fill=tk.X, pady=(0, 15))
+
+        # Proxy type
+        type_row = ttk.Frame(proxy_frame)
+        type_row.pack(fill=tk.X, pady=(0, 8))
+        ttk.Label(type_row, text="Proxy type:").pack(side=tk.LEFT, padx=(0, 10))
+        self.proxy_type_var = tk.StringVar(value="None")
+        self.proxy_type_combo = ttk.Combobox(
+            type_row, textvariable=self.proxy_type_var,
+            values=["None", "HTTP", "SOCKS5"], state="readonly", width=12)
+        self.proxy_type_combo.pack(side=tk.LEFT)
+        self.proxy_type_combo.bind("<<ComboboxSelected>>",
+                                   lambda e: self._on_proxy_type_changed())
+
+        # Host
+        host_row = ttk.Frame(proxy_frame)
+        host_row.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(host_row, text="Host:").pack(anchor=tk.W)
+        self.proxy_host_var = tk.StringVar()
+        self.proxy_host_entry = ttk.Entry(host_row, textvariable=self.proxy_host_var,
+                                          width=40)
+        self.proxy_host_entry.pack(fill=tk.X, pady=(2, 0))
+
+        # Port
+        port_row = ttk.Frame(proxy_frame)
+        port_row.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(port_row, text="Port:").pack(anchor=tk.W)
+        self.proxy_port_var = tk.StringVar()
+        self.proxy_port_entry = ttk.Entry(port_row, textvariable=self.proxy_port_var,
+                                          width=10)
+        self.proxy_port_entry.pack(anchor=tk.W, pady=(2, 0))
+
+        # Username (optional)
+        user_row = ttk.Frame(proxy_frame)
+        user_row.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(user_row, text="Username (optional):").pack(anchor=tk.W)
+        self.proxy_user_var = tk.StringVar()
+        self.proxy_user_entry = ttk.Entry(user_row, textvariable=self.proxy_user_var,
+                                          width=30)
+        self.proxy_user_entry.pack(anchor=tk.W, pady=(2, 0))
+
+        # Password (optional)
+        pass_row = ttk.Frame(proxy_frame)
+        pass_row.pack(fill=tk.X, pady=(0, 4))
+        ttk.Label(pass_row, text="Password (optional):").pack(anchor=tk.W)
+        self.proxy_pass_var = tk.StringVar()
+        self.proxy_pass_entry = ttk.Entry(pass_row, textvariable=self.proxy_pass_var,
+                                          show="*", width=30)
+        self.proxy_pass_entry.pack(anchor=tk.W, pady=(2, 0))
+
+        note = ttk.Label(proxy_frame,
+                         text="Proxy is used for all API requests (Shikimori, MAL, Telegram).\n"
+                              "Changes take effect after restarting the application.",
+                         foreground="gray", font=("Arial", 8), justify=tk.LEFT)
+        note.pack(anchor=tk.W, pady=(8, 0))
+
+    def _on_proxy_type_changed(self):
+        """Enable/disable proxy fields based on selected type."""
+        enabled = self.proxy_type_var.get() != "None"
+        state = tk.NORMAL if enabled else tk.DISABLED
+        self.proxy_host_entry.config(state=state)
+        self.proxy_port_entry.config(state=state)
+        self.proxy_user_entry.config(state=state)
+        self.proxy_pass_entry.config(state=state)
+
     def _on_telegram_enabled_changed(self):
         """Handle telegram enabled checkbox change"""
         enabled = self.telegram_enabled_var.get()

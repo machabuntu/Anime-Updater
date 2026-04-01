@@ -10,6 +10,7 @@ import secrets
 import string
 from urllib.parse import urlencode
 from typing import Optional, Dict, Any, List
+from utils.proxy import get_proxies
 
 
 class MALClient:
@@ -100,6 +101,8 @@ class MALClient:
         self.session.headers.update({
             'User-Agent': 'AnimeUpdater/1.0'
         })
+        self._proxies = get_proxies(self.config)
+        self.session.proxies.update(self._proxies)
 
         from utils.logger import get_logger
         self.logger = get_logger('mal_api')
@@ -158,7 +161,8 @@ class MALClient:
         }
 
         response = requests.post(f"{self.AUTH_URL}/token", data=data,
-                                 headers={'User-Agent': 'AnimeUpdater/1.0'})
+                                 headers={'User-Agent': 'AnimeUpdater/1.0'},
+                                 proxies=self._proxies)
 
         if response.status_code == 200:
             token_data = response.json()
@@ -190,7 +194,8 @@ class MALClient:
 
         try:
             response = requests.post(f"{self.AUTH_URL}/token", data=data,
-                                     headers={'User-Agent': 'AnimeUpdater/1.0'})
+                                     headers={'User-Agent': 'AnimeUpdater/1.0'},
+                                     proxies=self._proxies)
             if response.status_code == 200:
                 token_data = response.json()
                 self.config.set('mal.access_token', token_data['access_token'])

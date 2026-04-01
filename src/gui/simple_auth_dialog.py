@@ -139,10 +139,11 @@ class SimpleAuthDialog:
         self.callback_thread = None
         self.callback_port = 8080
         self.auth_success = False
+        self._dialog_width = 600
         
         self.dialog = tk.Toplevel(parent)
         self.dialog.title(f"{self.service_name} Authentication")
-        self.dialog.geometry("600x100")
+        self.dialog.geometry(f"{self._dialog_width}x100")
         self.dialog.resizable(True, True)
         self.dialog.minsize(500, 300)
         
@@ -188,9 +189,9 @@ class SimpleAuthDialog:
         instructions_frame = ttk.LabelFrame(main_frame, text="How it works", padding="15")
         instructions_frame.pack(fill=tk.X, pady=(0, 20))
         
-        instructions_label = ttk.Label(instructions_frame, text=self._get_instructions(),
-                                     wraplength=450, justify=tk.LEFT)
-        instructions_label.pack()
+        self.instructions_label = ttk.Label(instructions_frame, text=self._get_instructions(),
+                                            wraplength=450, justify=tk.LEFT)
+        self.instructions_label.pack()
         
         status_frame = ttk.LabelFrame(main_frame, text="Status", padding="15")
         status_frame.pack(fill=tk.X, pady=(0, 20))
@@ -198,6 +199,7 @@ class SimpleAuthDialog:
         self.status_var = tk.StringVar(value="Ready to start authentication")
         self.status_label = ttk.Label(status_frame, textvariable=self.status_var,
                                      wraplength=450, justify=tk.LEFT)
+
         self.status_label.pack()
         
         self.progress = ttk.Progressbar(status_frame, mode='indeterminate')
@@ -214,7 +216,7 @@ class SimpleAuthDialog:
                                      command=self._start_authentication)
         self.auth_button.pack(side=tk.RIGHT)
         
-        self.dialog.after(1, self._set_dynamic_height)
+        self.dialog.after(1, self._set_dynamic_size)
     
     def _find_available_port(self, start_port=8080, max_attempts=10):
         for port in range(start_port, start_port + max_attempts):
@@ -392,37 +394,34 @@ class SimpleAuthDialog:
         self._stop_callback_server()
         self.dialog.destroy()
     
-    def _set_dynamic_height(self):
+    def _set_dynamic_size(self):
         try:
             self.dialog.update_idletasks()
             main_frame = self.dialog.winfo_children()[0]
+            required_width = main_frame.winfo_reqwidth() + 40
             required_height = main_frame.winfo_reqheight() + 40
-            min_height = 350
-            final_height = max(min_height, required_height)
             
-            current_geometry = self.dialog.geometry()
-            width_pos = current_geometry.split('x')[0]
-            pos_part = current_geometry.split('+')[1:] if '+' in current_geometry else []
+            self._dialog_width = max(600, required_width)
+            final_height = max(350, required_height)
             
-            if pos_part:
-                new_geometry = f"{width_pos}x{final_height}+{'+'.join(pos_part)}"
-            else:
-                new_geometry = f"{width_pos}x{final_height}"
+            wrap = self._dialog_width - 150
+            self.instructions_label.configure(wraplength=wrap)
+            self.status_label.configure(wraplength=wrap)
             
-            self.dialog.geometry(new_geometry)
-            self._center_dialog_with_height(final_height)
+            self.dialog.geometry(f"{self._dialog_width}x{final_height}")
+            self._center_dialog_sized(self._dialog_width, final_height)
             
         except Exception as e:
-            print(f"Error calculating dynamic height: {e}")
+            print(f"Error calculating dynamic size: {e}")
             self.dialog.geometry("600x500")
     
-    def _center_dialog_with_height(self, height):
+    def _center_dialog_sized(self, width, height):
         try:
             self.dialog.update_idletasks()
             screen_width = self.dialog.winfo_screenwidth()
             screen_height = self.dialog.winfo_screenheight()
-            x = (screen_width - 600) // 2
+            x = (screen_width - width) // 2
             y = (screen_height - height) // 2
-            self.dialog.geometry(f"600x{height}+{x}+{y}")
+            self.dialog.geometry(f"{width}x{height}+{x}+{y}")
         except Exception:
             pass

@@ -3,6 +3,7 @@ Modern styling for tkinter GUI with Windows 11 aesthetic
 """
 
 import tkinter as tk
+import tkinter.font as tkfont
 from tkinter import ttk
 
 class ModernStyle:
@@ -209,6 +210,10 @@ class ModernStyle:
                            padding=[12, 6],
                            font=('Segoe UI', 9))
         
+        # Compute row height from actual font metrics so rows never overlap
+        tree_font = tkfont.Font(self.root, ('Segoe UI', 9))
+        tree_row_height = tree_font.metrics('linespace') + 4
+        
         # Configure Treeview for modern look
         self.style.configure('Modern.Treeview',
                            background=self.COLORS['bg_card'],
@@ -216,7 +221,8 @@ class ModernStyle:
                            fieldbackground=self.COLORS['bg_card'],
                            borderwidth=1,
                            relief='flat',
-                           font=('Segoe UI', 9))
+                           font=('Segoe UI', 9),
+                           rowheight=tree_row_height)
         
         self.style.configure('Modern.Treeview.Heading',
                            background=self.COLORS['bg_secondary'],
@@ -341,7 +347,8 @@ class ModernStyle:
                            fieldbackground=self.COLORS['bg_card'],
                            borderwidth=1,
                            relief='flat',
-                           font=('Segoe UI', 9))
+                           font=('Segoe UI', 9),
+                           rowheight=tree_row_height)
         
         self.style.configure('Treeview.Heading',
                            background=self.COLORS['bg_secondary'],

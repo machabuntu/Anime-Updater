@@ -7,6 +7,7 @@ import requests
 import time
 from urllib.parse import urlencode
 from typing import Optional, Dict, Any, List
+from utils.proxy import get_proxies
 
 class ShikimoriClient:
     """Client for Shikimori API operations"""
@@ -43,6 +44,8 @@ class ShikimoriClient:
         self.session.headers.update({
             'User-Agent': 'ShikimoriUpdater/1.0'
         })
+        self._proxies = get_proxies(self.config)
+        self.session.proxies.update(self._proxies)
         
         # Setup logging
         from utils.logger import get_logger
@@ -84,7 +87,8 @@ class ShikimoriClient:
             'User-Agent': 'ShikimoriUpdater/1.0'
         }
         
-        response = requests.post(f"{self.AUTH_URL}/token", data=data, headers=headers)
+        response = requests.post(f"{self.AUTH_URL}/token", data=data,
+                                  headers=headers, proxies=self._proxies)
         
         if response.status_code == 200:
             token_data = response.json()
@@ -123,7 +127,8 @@ class ShikimoriClient:
         }
         
         try:
-            response = requests.post(f"{self.AUTH_URL}/token", data=data, headers=headers)
+            response = requests.post(f"{self.AUTH_URL}/token", data=data,
+                                      headers=headers, proxies=self._proxies)
             
             if response.status_code == 200:
                 token_data = response.json()
