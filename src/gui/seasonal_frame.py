@@ -218,7 +218,7 @@ class SeasonalFrame(ttk.Frame):
                 self.context_menu.entryconfig(0, label=f"Open on {service_name}")
             except Exception:
                 pass
-            self.context_menu.post(event.x_root, event.y_root)
+            self.context_menu.tk_popup(event.x_root, event.y_root)
 
     # ------------------------------------------------------------------
     # Data loading

@@ -1351,7 +1351,11 @@ class MainWindow:
             self._commit_pending_episode_changes()
         
         self.selected_anime = anime_entry
-        
+        self.selected_manga = None
+
+        if anime_entry and hasattr(self, 'current_mode') and self.current_mode == 'manga':
+            self._switch_to_anime_mode()
+
         if anime_entry:
             anime = anime_entry.get('anime', {})
             
@@ -2169,11 +2173,15 @@ class MainWindow:
             
             # Open log folder button
             def open_log_folder():
-                import os
-                import subprocess
+                import os, sys, subprocess
                 log_dir = os.path.dirname(log_file)
                 try:
-                    subprocess.Popen(f'explorer "{log_dir}"')
+                    if sys.platform == 'win32':
+                        os.startfile(log_dir)
+                    elif sys.platform == 'darwin':
+                        subprocess.Popen(['open', log_dir])
+                    else:
+                        subprocess.Popen(['xdg-open', log_dir])
                 except Exception as e:
                     messagebox.showerror("Error", f"Could not open log folder: {e}")
             

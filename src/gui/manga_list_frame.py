@@ -189,7 +189,12 @@ class MangaListFrame(ttk.Frame):
         item = self.tree.identify_row(event.y)
         if item:
             self.tree.selection_set(item)
-            self.context_menu.post(event.x_root, event.y_root)
+            try:
+                service_name = self.main_window.get_active_client().SERVICE_NAME
+                self.context_menu.entryconfig(0, label=f"Open on {service_name}")
+            except Exception:
+                pass
+            self.context_menu.tk_popup(event.x_root, event.y_root)
     
     def _filter_changed(self, event=None):
         """Handle filter changes"""
