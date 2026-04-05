@@ -112,7 +112,11 @@ class PlayerMonitor:
                     # Try to extract current file from window title
                     current_file = self._extract_file_from_title(window_title)
                     
-                    # Fallback to command line if window title doesn't work
+                    # Fallback: read open video file from /proc fd (works on Wayland)
+                    if not current_file and sys.platform != "win32":
+                        current_file = self._get_video_from_proc_fd(pid)
+
+                    # Final fallback: command line args
                     if not current_file:
                         cmdline = proc.info['cmdline']
                         current_file = self._extract_file_path(cmdline)
@@ -263,7 +267,25 @@ class PlayerMonitor:
         except Exception:
             pass
         return None
-    
+
+    def _get_video_from_proc_fd(self, pid: int) -> Optional[str]:
+        """Read /proc/[pid]/fd/ symlinks to find the currently open video file.
+
+        Works on any Linux (X11 or Wayland) without external tools.
+        """
+        proc_fd = Path(f"/proc/{pid}/fd")
+        try:
+            for entry in proc_fd.iterdir():
+                try:
+                    target = entry.resolve(strict=True)
+                    if target.is_file() and self._is_video_file(str(target)):
+                        return str(target)
+                except (OSError, ValueError):
+                    continue
+        except (PermissionError, FileNotFoundError):
+            pass
+        return None
+
     def _extract_file_from_title(self, window_title: str) -> Optional[str]:
         """Extract file path from window title"""
         if not window_title:
