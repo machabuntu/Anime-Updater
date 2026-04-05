@@ -114,7 +114,8 @@ class PlayerMonitor:
                     
                     # Fallback: read open video file from /proc fd (works on Wayland)
                     if not current_file and sys.platform != "win32":
-                        current_file = self._get_video_from_proc_fd(pid)
+                        old_file = self.active_players[pid].file_path if pid in self.active_players else None
+                        current_file = self._get_video_from_proc_fd(pid, tracked_file=old_file)
 
                     # Final fallback: command line args
                     if not current_file:
@@ -268,23 +269,34 @@ class PlayerMonitor:
             pass
         return None
 
-    def _get_video_from_proc_fd(self, pid: int) -> Optional[str]:
+    def _get_video_from_proc_fd(self, pid: int, tracked_file: Optional[str] = None) -> Optional[str]:
         """Read /proc/[pid]/fd/ symlinks to find the currently open video file.
 
         Works on any Linux (X11 or Wayland) without external tools.
+        Players may pre-load the next file for gapless playback, so when
+        multiple video fds are open we stick with *tracked_file* if it is
+        still among them.
         """
         proc_fd = Path(f"/proc/{pid}/fd")
+        video_files: List[str] = []
         try:
             for entry in proc_fd.iterdir():
                 try:
-                    target = entry.resolve(strict=True)
-                    if target.is_file() and self._is_video_file(str(target)):
-                        return str(target)
+                    target = str(entry.resolve(strict=True))
+                    if Path(target).is_file() and self._is_video_file(target):
+                        video_files.append(target)
                 except (OSError, ValueError):
                     continue
         except (PermissionError, FileNotFoundError):
             pass
-        return None
+
+        if not video_files:
+            return None
+
+        if tracked_file and tracked_file in video_files:
+            return tracked_file
+
+        return video_files[0]
 
     def _extract_file_from_title(self, window_title: str) -> Optional[str]:
         """Extract file path from window title"""
