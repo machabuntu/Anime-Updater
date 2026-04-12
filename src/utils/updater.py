@@ -69,18 +69,21 @@ class Updater:
             self.release_notes = data.get('body', '')
             
             # Find ZIP archive download URL
-            # Look for pattern: Anime_Updater_X.X.X_Windows.zip
+            # Look for platform-specific archive: Anime_Updater_X.X.X_Windows.zip / _Linux.zip
             assets = data.get('assets', [])
             logger.info(f"Found {len(assets)} assets in release")
-            
+
+            is_linux = sys.platform != "win32"
+            platform_suffix = "_Linux.zip" if is_linux else "_Windows.zip"
+
             for asset in assets:
                 asset_name = asset.get('name', '')
                 download_url = asset.get('browser_download_url', '')
                 logger.info(f"Asset: {asset_name}, Download URL: {download_url}")
-                
+
                 if ((asset_name.startswith('Anime_Updater_') or
                      asset_name.startswith('Shikimori_Updater_')) and
-                    asset_name.endswith('_Windows.zip')):
+                    asset_name.endswith(platform_suffix)):
                     if download_url:
                         self.download_url = download_url
                         logger.info(f"Found ZIP archive: {asset_name}")
@@ -88,9 +91,9 @@ class Updater:
                         break
                     else:
                         logger.warning(f"ZIP archive found but no download URL: {asset_name}")
-                        
-                # Also try more flexible matching
-                elif (asset_name.endswith('.zip') and 
+
+                # Also try more flexible matching (platform-aware)
+                elif (asset_name.endswith(platform_suffix) and
                       ('Anime_Updater' in asset_name or 'AnimeUpdater' in asset_name or
                        'Anime Updater' in asset_name or
                        'Shikimori' in asset_name or 'ShikimoriUpdater' in asset_name)):
@@ -101,9 +104,10 @@ class Updater:
                         break
                     else:
                         logger.warning(f"ZIP archive found but no download URL: {asset_name}")
-            
+
             if not self.download_url:
-                logger.warning("No Windows ZIP archive found in latest release")
+                platform_name = "Linux" if is_linux else "Windows"
+                logger.warning(f"No {platform_name} ZIP archive found in latest release")
                 logger.warning(f"Available assets: {[asset.get('name', '') for asset in assets]}")
                 return False
             
@@ -145,7 +149,8 @@ class Updater:
         try:
             # Create temporary file for ZIP download
             temp_dir = tempfile.gettempdir()
-            zip_filename = f"Anime_Updater_{self.latest_version}_Windows.zip"
+            platform_suffix = "_Linux.zip" if sys.platform != "win32" else "_Windows.zip"
+            zip_filename = f"Anime_Updater_{self.latest_version}{platform_suffix}"
             zip_path = os.path.join(temp_dir, zip_filename)
             
             logger.info(f"Downloading update ZIP from {self.download_url}")
@@ -247,8 +252,12 @@ class Updater:
             # Try to use standalone updater first
             if self._use_standalone_updater(downloaded_path, current_exe):
                 return True
-            
-            # Fallback to batch script method
+
+            if sys.platform != "win32":
+                logger.error("No standalone updater found. Place 'updater_linux' next to the application binary.")
+                return False
+
+            # Windows fallback: batch script method
             logger.info("Falling back to batch script method")
             update_script = self._create_update_script(downloaded_path, current_exe)
             
@@ -270,73 +279,67 @@ class Updater:
     
     def _extract_exe_from_zip(self, zip_path: str) -> Optional[str]:
         """
-        Extract only the main application EXE file from the ZIP archive
-        Ignores updater.exe and other files
-        
-        Args:
-            zip_path: Path to the ZIP file
-            
-        Returns:
-            Path to extracted EXE file or None if failed
+        Extract only the main application binary from the ZIP archive.
+        On Windows looks for .exe; on Linux looks for 'anime-updater'.
         """
         try:
             temp_dir = tempfile.gettempdir()
-            
-            logger.info(f"Extracting main application EXE from ZIP archive")
-            
-            # Target executable names to look for (main application)
-            target_exe_names = ["Anime Updater.exe", "AnimeUpdater.exe", "Shikimori Updater.exe", "ShikimoriUpdater.exe"]
-            
-            # Files to ignore during extraction
-            ignore_files = ["updater.exe", "standalone_updater.exe", "ShikimoriUpdater_Updater.exe", "AnimeUpdater_Updater.exe"]
-            
+
+            is_linux = sys.platform != "win32"
+            if is_linux:
+                target_bin_names = ["anime-updater"]
+                ignore_files = ["updater_linux"]
+                final_bin_path = os.path.join(temp_dir, f"anime-updater_{self.latest_version}")
+            else:
+                target_bin_names = ["Anime Updater.exe", "AnimeUpdater.exe",
+                                    "Shikimori Updater.exe", "ShikimoriUpdater.exe"]
+                ignore_files = ["updater.exe", "standalone_updater.exe",
+                                "ShikimoriUpdater_Updater.exe", "AnimeUpdater_Updater.exe"]
+                final_bin_path = os.path.join(temp_dir, f"AnimeUpdater_{self.latest_version}.exe")
+
+            logger.info(f"Extracting main application binary from ZIP archive")
+
             with zipfile.ZipFile(zip_path, 'r') as zip_ref:
-                # List all files in the ZIP
                 file_list = zip_ref.namelist()
                 logger.info(f"Files in ZIP: {file_list}")
-                
-                # Find the main application executable
-                main_exe_entry = None
+
+                main_bin_entry = None
                 for entry in file_list:
                     filename = os.path.basename(entry)
-                    
-                    # Skip directories
+
                     if entry.endswith('/'):
                         continue
-                    
-                    # Skip ignored files
+
                     if filename.lower() in [f.lower() for f in ignore_files]:
                         logger.info(f"Ignoring file during extraction: {filename}")
                         continue
-                    
-                    # Check if this is the main application executable
-                    if filename in target_exe_names:
-                        main_exe_entry = entry
-                        logger.info(f"Found main application executable: {filename}")
+
+                    if filename in target_bin_names:
+                        main_bin_entry = entry
+                        logger.info(f"Found main application binary: {filename}")
                         break
-                
-                if not main_exe_entry:
-                    logger.error(f"Could not find main application executable in ZIP")
-                    logger.error(f"Looking for: {target_exe_names}")
+
+                if not main_bin_entry:
+                    logger.error(f"Could not find main application binary in ZIP")
+                    logger.error(f"Looking for: {target_bin_names}")
                     logger.error(f"Available files: {[os.path.basename(f) for f in file_list if not f.endswith('/')]}")
                     return None
-                
-                # Extract only the main application executable directly to temp
-                final_exe_path = os.path.join(temp_dir, f"AnimeUpdater_{self.latest_version}.exe")
-                
-                logger.info(f"Extracting {main_exe_entry} to {final_exe_path}")
-                
-                # Extract the specific file
-                with zip_ref.open(main_exe_entry) as source, open(final_exe_path, 'wb') as target:
+
+                logger.info(f"Extracting {main_bin_entry} to {final_bin_path}")
+
+                with zip_ref.open(main_bin_entry) as source, open(final_bin_path, 'wb') as target:
                     shutil.copyfileobj(source, target)
-                
-                logger.info(f"Main application EXE extracted to {final_exe_path}")
-                logger.info(f"Extracted file size: {os.path.getsize(final_exe_path)} bytes")
-                
-                return final_exe_path
-            
+
+                if is_linux:
+                    os.chmod(final_bin_path, 0o755)
+
+                logger.info(f"Main application binary extracted to {final_bin_path}")
+                logger.info(f"Extracted file size: {os.path.getsize(final_bin_path)} bytes")
+
+                return final_bin_path
+
         except Exception as e:
-            logger.error(f"Failed to extract EXE from ZIP: {e}")
+            logger.error(f"Failed to extract binary from ZIP: {e}")
             return None
     
     def _create_update_script(self, new_exe_path: str, current_exe_path: str) -> str:
@@ -550,15 +553,21 @@ del "%~f0"
                 app_dir = os.path.dirname(os.path.dirname(app_dir))  # Go up to project root
             
             # Try different possible locations for standalone updater
-            possible_updater_locations = [
-                os.path.join(app_dir, "updater.exe"),
-                os.path.join(app_dir, "standalone_updater.exe"),
-                os.path.join(app_dir, "AnimeUpdater_Updater.exe"),
-                os.path.join(app_dir, "ShikimoriUpdater_Updater.exe"),
-                os.path.join(app_dir, "dist", "updater.exe"),
-                os.path.join(app_dir, "dist", "standalone_updater.exe"),
-                os.path.join(app_dir, "build", "updater.exe")
-            ]
+            if sys.platform != "win32":
+                possible_updater_locations = [
+                    os.path.join(app_dir, "updater_linux"),
+                    os.path.join(app_dir, "dist", "updater_linux"),
+                ]
+            else:
+                possible_updater_locations = [
+                    os.path.join(app_dir, "updater.exe"),
+                    os.path.join(app_dir, "standalone_updater.exe"),
+                    os.path.join(app_dir, "AnimeUpdater_Updater.exe"),
+                    os.path.join(app_dir, "ShikimoriUpdater_Updater.exe"),
+                    os.path.join(app_dir, "dist", "updater.exe"),
+                    os.path.join(app_dir, "dist", "standalone_updater.exe"),
+                    os.path.join(app_dir, "build", "updater.exe")
+                ]
             
             updater_exe = None
             for location in possible_updater_locations:
@@ -568,7 +577,7 @@ del "%~f0"
                     break
             
             if not updater_exe:
-                logger.info("No standalone updater found, will use batch script fallback")
+                logger.info("No standalone updater found, will use fallback method")
                 return False
             
             # Launch standalone updater
