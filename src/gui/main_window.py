@@ -81,6 +81,9 @@ class MainWindow:
         
         # Update check timer
         self.update_check_timer = None
+
+        # Connection retry state
+        self._connection_retry_active = False
         
         # Setup window
         self._setup_window()
@@ -847,46 +850,72 @@ class MainWindow:
         self._set_status("Logged out")
         self.logger.info("Logout completed successfully")
     
-    def _load_user_data(self):
-        """Load user data from the active service"""
+    def _load_user_data(self, is_retry: bool = False):
+        """Load user data from the active service.
+
+        When called with is_retry=True the connection retry guard is cleared
+        first so that a fresh retry cycle can be scheduled if this attempt
+        also fails.
+        """
+        if is_retry:
+            self._connection_retry_active = False
+
         self.logger.info("Starting user data loading process")
-        
+
         def load_data():
             try:
-                self._set_status("Loading user data...")
-                
+                self.root.after(0, lambda: self._set_status("Loading user data...", auto_clear=False))
+
                 # Get current user
                 self.logger.info(f"Fetching current user information from {self.api_client.SERVICE_NAME}")
                 self.current_user = self.api_client.get_current_user()
                 if not self.current_user:
                     self.logger.error(f"Failed to get user information from {self.api_client.SERVICE_NAME} API")
-                    messagebox.showerror("Error", "Failed to get user information")
+                    self.root.after(0, lambda: self._set_status(
+                        "Connection failed — retrying in 5 s...", auto_clear=False))
+                    self.root.after(0, self._schedule_connection_retry)
                     return
-                
+
+                # Connection succeeded — clear any active retry
+                self._connection_retry_active = False
+
                 username = self.current_user.get('nickname', 'Unknown')
                 user_id = self.current_user.get('id', 'Unknown')
                 self.logger.info(f"Successfully loaded user: {username} (ID: {user_id})")
-                
+
                 # Update UI on main thread
                 self.root.after(0, self._update_auth_ui)
-                
+
                 # Load anime list
                 self.logger.info("Loading anime list data")
                 self._refresh_list_data()
-                
+
                 # Load manga list
                 self.logger.info("Loading manga list data")
                 self._refresh_manga_list_data()
-                
+
                 self.logger.info("User data loading completed successfully")
-                
+
             except Exception as e:
                 self.logger.error(f"Error loading user data: {str(e)}", exc_info=True)
-                self.root.after(0, lambda: messagebox.showerror("Error", f"Failed to load user data: {str(e)}"))
-                self.root.after(0, lambda: self._set_status("Error loading data"))
-        
+                err_msg = str(e)
+                self.root.after(0, lambda: self._set_status(
+                    f"Connection error: {err_msg} — retrying in 5 s...", auto_clear=False))
+                self.root.after(0, self._schedule_connection_retry)
+
         threading.Thread(target=load_data, daemon=True).start()
-    
+
+    def _schedule_connection_retry(self):
+        """Schedule a retry of _load_user_data in 5 seconds (no-op if already scheduled)."""
+        if self._connection_retry_active:
+            return
+        self._connection_retry_active = True
+        self.root.after(5000, lambda: self._load_user_data(is_retry=True))
+
+    def _cancel_connection_retry(self):
+        """Cancel any pending connection retry."""
+        self._connection_retry_active = False
+
     def _refresh_list(self, force_refresh: bool = False):
         """Refresh anime list from the active service"""
         if not self.config.is_authenticated:
@@ -1318,6 +1347,7 @@ class MainWindow:
     def on_service_changed(self):
         """Called after the active service has been switched in config.
         Re-creates the API client and reloads data if authenticated."""
+        self._cancel_connection_retry()
         self.api_client = self._create_active_client(self.config)
         self.anime_matcher = EnhancedAnimeMatcher(self.api_client, self.cache_manager)
         from utils.notification_manager import NotificationManager

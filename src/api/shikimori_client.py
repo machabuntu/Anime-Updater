@@ -11,12 +11,15 @@ from utils.proxy import get_proxies
 
 class ShikimoriClient:
     """Client for Shikimori API operations"""
-    
+
     BASE_URL = "https://shikimori.io/api"
     AUTH_URL = "https://shikimori.io/oauth"
     SERVICE_NAME = "Shikimori"
     SERVICE_URL = "https://shikimori.io"
     SERVICE_KEY = "shikimori"
+
+    MAX_RETRIES = 2
+    RETRY_DELAY = 3
     
     # Anime list statuses
     STATUSES = {
@@ -149,16 +152,27 @@ class ShikimoriClient:
             return False
     
     def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
-        """Make authenticated request with automatic token refresh"""
+        """Make authenticated request with automatic token refresh and retries"""
         url = f"{self.BASE_URL}{endpoint}"
-        
-        response = self.session.request(method, url, **kwargs)
-        
+        last_exc: Optional[Exception] = None
+        response: Optional[requests.Response] = None
+        for attempt in range(self.MAX_RETRIES + 1):
+            try:
+                response = self.session.request(method, url, **kwargs)
+                if response.status_code < 500:
+                    break
+                self.logger.warning(f"Server error {response.status_code} on attempt {attempt + 1} for {url}")
+            except requests.RequestException as exc:
+                last_exc = exc
+                self.logger.warning(f"Request failed (attempt {attempt + 1}): {exc}")
+            if attempt < self.MAX_RETRIES:
+                time.sleep(self.RETRY_DELAY)
+        if response is None:
+            raise last_exc
         # If unauthorized, try to refresh token
         if response.status_code == 401:
             if self.refresh_access_token():
                 response = self.session.request(method, url, **kwargs)
-        
         return response
     
     def _wait_for_api_rate_limit(self):

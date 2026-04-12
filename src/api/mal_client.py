@@ -22,6 +22,9 @@ class MALClient:
     SERVICE_URL = "https://myanimelist.net"
     SERVICE_KEY = "mal"
 
+    MAX_RETRIES = 2
+    RETRY_DELAY = 3
+
     STATUSES = {
         'planned': 'Plan to Watch',
         'watching': 'Watching',
@@ -217,7 +220,21 @@ class MALClient:
 
     def _make_request(self, method: str, endpoint: str, **kwargs) -> requests.Response:
         url = f"{self.BASE_URL}{endpoint}"
-        response = self.session.request(method, url, **kwargs)
+        last_exc: Optional[Exception] = None
+        response: Optional[requests.Response] = None
+        for attempt in range(self.MAX_RETRIES + 1):
+            try:
+                response = self.session.request(method, url, **kwargs)
+                if response.status_code < 500:
+                    break
+                self.logger.warning(f"Server error {response.status_code} on attempt {attempt + 1} for {url}")
+            except requests.RequestException as exc:
+                last_exc = exc
+                self.logger.warning(f"Request failed (attempt {attempt + 1}): {exc}")
+            if attempt < self.MAX_RETRIES:
+                time.sleep(self.RETRY_DELAY)
+        if response is None:
+            raise last_exc
         if response.status_code == 401:
             if self.refresh_access_token():
                 response = self.session.request(method, url, **kwargs)
