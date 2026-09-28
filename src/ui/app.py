@@ -102,6 +102,7 @@ def run(config) -> int:
 
     window = MainWindow(config)
     window.show()
+    window.controller.start()
 
     try:
         return app.exec()

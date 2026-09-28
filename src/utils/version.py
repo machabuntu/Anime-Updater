@@ -3,13 +3,13 @@ Version management for Anime Updater
 """
 
 # Application version
-__version__ = "4.0.1"
+__version__ = "4.0.3"
 
 # GitHub repository for updates
 GITHUB_REPO = "machabuntu/Anime-Updater"
 
 # Build information
-BUILD_DATE = "2026-03-16"
+BUILD_DATE = "2026-09-28"
 BUILD_NUMBER = "1"
 
 def get_version() -> str:
