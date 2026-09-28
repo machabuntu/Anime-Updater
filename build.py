@@ -26,18 +26,36 @@ def check_pyinstaller():
             return False
 
 SPEC_FILE = "Shikimori Updater.spec"
+BINARY_PATH = os.path.join("dist", "Anime Updater.exe")
+
+# Import name -> pip package. PyInstaller silently leaves out whatever is not
+# installed, producing an exe that dies at start, so all of them are checked.
+REQUIRED_MODULES = {
+    "PySide6": "PySide6-Essentials",
+    "requests": "requests",
+    "socks": "pysocks",
+    "psutil": "psutil",
+    "dotenv": "python-dotenv",
+    "win32gui": "pywin32",
+}
 
 
-def check_pyside():
-    """Verify PySide6 is installed before handing over to PyInstaller."""
-    try:
-        import PySide6
-    except ImportError:
-        print("[ERROR] PySide6 is not installed")
-        print("Install it with: pip install -r requirements.txt")
+def check_requirements():
+    """Verify every runtime dependency is importable before building."""
+    missing = []
+    for module, package in REQUIRED_MODULES.items():
+        try:
+            __import__(module)
+        except ImportError:
+            missing.append(package)
+
+    if missing:
+        print(f"[ERROR] Missing packages: {', '.join(missing)}")
+        print("        Install them with:  pip install -r requirements.txt")
         return False
 
-    print(f"[OK] PySide6 {PySide6.__version__} is available")
+    import PySide6
+    print(f"[OK] PySide6 {PySide6.__version__} and the other requirements are installed")
     return True
 
 
@@ -86,8 +104,13 @@ def main():
     """Main build function"""
     print("Anime Updater Build Script")
     print("=" * 40)
-    
-    if not check_pyside():
+
+    if sys.platform != "win32":
+        print("[ERROR] build.py builds the Windows exe and needs a Windows Python;")
+        print("        on Linux use build_linux.py.")
+        return False
+
+    if not check_requirements():
         return False
 
     # Check PyInstaller
@@ -103,25 +126,29 @@ def main():
     
     # Copy additional files
     copy_files()
-    
+
+    if not os.path.exists(BINARY_PATH):
+        print(f"[ERROR] {BINARY_PATH} was not produced. Check the PyInstaller output.")
+        return False
+
     print("\n" + "=" * 40)
     print("[SUCCESS] Build completed successfully!")
-    
-    exe_path = os.path.join("dist", "Anime Updater.exe")
-    if os.path.exists(exe_path):
-        size = os.path.getsize(exe_path) / (1024 * 1024)  # Size in MB
-        print(f"\nExecutable created: {exe_path}")
-        print(f"Size: {size:.1f} MB")
-        print("\nYou can now distribute the 'dist' folder")
-        print("or just the executable file.")
-    
+
+    size = os.path.getsize(BINARY_PATH) / (1024 * 1024)  # Size in MB
+    print(f"\nExecutable created: {BINARY_PATH}")
+    print(f"Size: {size:.1f} MB")
+    print("\nYou can now distribute the 'dist' folder")
+    print("or just the executable file.")
+
     return True
 
 if __name__ == "__main__":
     try:
-        main()
+        sys.exit(0 if main() else 1)
     except KeyboardInterrupt:
         print("\n\nBuild cancelled by user.")
+        sys.exit(130)
     except Exception as e:
         print(f"\nUnexpected error during build: {e}")
         print("Please check the requirements and try again.")
+        sys.exit(1)

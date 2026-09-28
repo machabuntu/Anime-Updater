@@ -54,11 +54,9 @@ class GalleryWindow(QMainWindow):
         toolbar.addWidget(toggle)
 
         self.statusBar().addWidget(QLabel('Ready'))
-        theme().apply_window_frame(self)
 
     def _toggle_theme(self) -> None:
         theme().toggle()
-        theme().apply_window_frame(self)
 
     def _controls_tab(self) -> QWidget:
         page = QWidget()

@@ -107,6 +107,19 @@ python build_release.py 4.1.0         # Windows
 python build_release_linux.py 4.1.0   # Linux
 ```
 
+PyInstaller cannot cross-compile: the Windows exe has to come from a Windows
+Python. Without a Windows machine, build it under Wine:
+
+```bash
+tools/build_windows_wine.sh 4.1.0
+```
+
+The first run creates a separate Wine prefix in
+`~/.local/share/wineprefixes/anime-updater-build` with Python and the
+requirements; later runs reuse it. Wine lacks the `icuuc.dll` that Windows 10+
+ships and Qt links against, so the script installs a stand-in that forwards to
+an official ICU build. It only lives in that prefix and is not bundled.
+
 The self-updater is a second, separate binary, built so that replacing the main
 executable does not fight with PyInstaller's temporary extraction directory.
 The release scripts build it too; to build it alone:
@@ -211,7 +224,7 @@ src/ui/                      the Qt interface
     workers.py                 background work on a QThreadPool
 src/utils/                   player monitoring, matching, Telegram, logging
 tests/                       unit tests for the core services
-tools/check_imports.py       imports every module, used by CI
+tools/check_imports.py       imports every module to catch broken imports
 ```
 
 ## Development
@@ -232,8 +245,6 @@ starts in.
 Colours live in `src/ui/theme/tokens.py` and are substituted into
 `src/ui/theme/app.qss` wherever a `@token` appears, so a palette change is one
 edit in one file.
-
-GitHub Actions runs the tests and builds both binaries on every push.
 
 ## Troubleshooting
 

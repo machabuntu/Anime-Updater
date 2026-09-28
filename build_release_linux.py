@@ -40,16 +40,31 @@ EXTRA_FILES = (
 def update_version(version_file: str, new_version: str) -> bool:
     """Patch __version__ and BUILD_DATE inside version.py."""
     try:
-        content = Path(version_file).read_text(encoding="utf-8")
+        # newline="" keeps the file's own line endings on every platform.
+        with open(version_file, encoding="utf-8", newline="") as fh:
+            content = fh.read()
         content = re.sub(r'__version__ = "[^"]*"', f'__version__ = "{new_version}"', content)
         today = datetime.date.today().strftime("%Y-%m-%d")
         content = re.sub(r'BUILD_DATE = "[^"]*"', f'BUILD_DATE = "{today}"', content)
-        Path(version_file).write_text(content, encoding="utf-8")
+        with open(version_file, "w", encoding="utf-8", newline="") as fh:
+            fh.write(content)
         print(f"[OK] Version set to {new_version}, build date to {today}")
         return True
     except OSError as exc:
         print(f"[ERROR] Could not update version file: {exc}")
         return False
+
+
+def remove_stale_binaries() -> bool:
+    """Delete earlier build outputs so a failed build cannot be packaged."""
+    for name in (BINARY_NAME, "updater_linux"):
+        path = Path("dist") / name
+        try:
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            print(f"[ERROR] Could not remove the old {path}: {exc}")
+            return False
+    return True
 
 
 def run_script(script: str) -> bool:
@@ -142,9 +157,14 @@ def main() -> int:
 
     print(f"Building version: {new_version}")
 
+    if not remove_stale_binaries():
+        return 1
     if not update_version(VERSION_FILE, new_version):
         return 1
     if not run_script("build_linux.py"):
+        return 1
+    if not (Path("dist") / BINARY_NAME).exists():
+        print(f"[ERROR] build_linux.py finished but dist/{BINARY_NAME} is missing")
         return 1
     # Best-effort: a missing updater binary still produces a usable zip.
     run_script("build_updater_linux.py")

@@ -55,6 +55,7 @@ class ThemeManager(QObject):
         super().__init__(app)
         self._app = app
         self._mode = mode if mode in THEMES else THEME_SYSTEM
+        self._syncing = False
         self._dark = self._resolve_dark(self._mode)
         self._tokens: Dict[str, str] = {}
         self._qss_template = self._load_template()
@@ -114,6 +115,7 @@ class ThemeManager(QObject):
 
     def apply(self) -> None:
         """Rebuild and install the stylesheet for the current mode."""
+        self._sync_native_scheme()
         dark = self._resolve_dark(self._mode)
         self._dark = dark
         self._tokens = tokens.palette(dark)
@@ -122,30 +124,33 @@ class ThemeManager(QObject):
         self._apply_palette(self._tokens)
         self.theme_changed.emit(dark)
 
-    def apply_window_frame(self, widget) -> None:
-        """Match the Windows title bar to the theme.
+    def _sync_native_scheme(self) -> None:
+        """Tell Qt which scheme is chosen so native title bars follow it.
 
-        Qt does not follow an application stylesheet for native window
-        decorations, so the immersive dark mode flag has to be set directly.
-        No-op everywhere except Windows.
+        The stylesheet never reaches window decorations. On Windows Qt paints
+        the title bar of every window from the requested colour scheme; other
+        platforms leave decorations to the window manager, so they are left
+        alone. ``system`` must clear the override before the scheme is read,
+        otherwise the previous explicit choice would be reported back.
         """
         if sys.platform != 'win32':
             return
-        try:
-            import ctypes
+        hints = QGuiApplication.styleHints()
+        wanted = {
+            THEME_DARK: Qt.ColorScheme.Dark,
+            THEME_LIGHT: Qt.ColorScheme.Light,
+        }.get(self._mode)
 
-            hwnd = int(widget.winId())
-            value = ctypes.c_int(1 if self._dark else 0)
-            dwmapi = ctypes.windll.dwmapi
-            # DWMWA_USE_IMMERSIVE_DARK_MODE, with the pre-20H1 attribute id as
-            # a fallback for older Windows 10 builds.
-            for attribute in (20, 19):
-                if dwmapi.DwmSetWindowAttribute(
-                    hwnd, attribute, ctypes.byref(value), ctypes.sizeof(value)
-                ) == 0:
-                    break
+        self._syncing = True
+        try:
+            if wanted is None:
+                hints.unsetColorScheme()
+            else:
+                hints.setColorScheme(wanted)
         except Exception:
             pass
+        finally:
+            self._syncing = False
 
     # -------------------------------------------------------------- private --
 
@@ -228,7 +233,9 @@ class ThemeManager(QObject):
         return False
 
     def _on_system_scheme_changed(self, _scheme) -> None:
-        if self._mode == THEME_SYSTEM:
+        if self._syncing or self._mode != THEME_SYSTEM:
+            return
+        if self._resolve_dark(self._mode) != self._dark:
             self.apply()
 
 
