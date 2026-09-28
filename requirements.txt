@@ -1,7 +1,11 @@
+# Qt bindings. Essentials leaves out the Addons wheels (3D, charts, WebEngine),
+# which the application does not use and which dominate the build size.
+PySide6-Essentials>=6.11
+
 requests>=2.31.0
 pysocks>=1.7.1
 psutil>=5.9.0
 python-dotenv>=1.0.0
-Pillow>=10.0.0
-pystray>=0.19.0
+
+# Enumerating media player windows to read their titles.
 pywin32>=306; sys_platform == "win32"

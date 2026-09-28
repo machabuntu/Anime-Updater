@@ -25,62 +25,33 @@ def check_pyinstaller():
             print("[ERROR] Failed to install PyInstaller")
             return False
 
+SPEC_FILE = "Shikimori Updater.spec"
+
+
+def check_pyside():
+    """Verify PySide6 is installed before handing over to PyInstaller."""
+    try:
+        import PySide6
+    except ImportError:
+        print("[ERROR] PySide6 is not installed")
+        print("Install it with: pip install -r requirements.txt")
+        return False
+
+    print(f"[OK] PySide6 {PySide6.__version__} is available")
+    return True
+
+
 def build_executable():
-    """Build the executable using PyInstaller"""
+    """Build the executable from the spec file"""
     print("Building executable...")
-    
-    # Use spec file if it exists, otherwise use command line
-    spec_files = ["Anime Updater.spec", "anime_updater.spec", "Shikimori Updater.spec", "shikimori_updater.spec"]
-    spec_file = None
-    for spec in spec_files:
-        if os.path.exists(spec):
-            spec_file = spec
-            break
-    
-    if spec_file:
-        print(f"Using spec file for build: {spec_file}")
-        cmd = [
-            "pyinstaller",
-            "--clean",     # Clean PyInstaller cache
-            "--noconfirm", # Overwrite output directory
-            spec_file
-        ]
-    else:
-        print("Using command line build...")
-        # PyInstaller command
-        cmd = [
-            "pyinstaller",
-            "--name", "Anime Updater",
-            "--windowed",  # No console window
-            "--onefile",   # Single executable file
-            "--clean",     # Clean PyInstaller cache
-            "--noconfirm", # Overwrite output directory
-            "--add-data", "src;src",  # Include src directory
-            "main.py"
-        ]
-        
-        # Add icon files as data if they exist
-        if os.path.exists("icon.png"):
-            cmd.extend(["--add-data", "icon.png;."])
-        if os.path.exists("icon.ico"):
-            cmd.extend(["--add-data", "icon.ico;."])
-        
-        # Add icon if it exists
-        if os.path.exists("icon.ico"):
-            cmd.extend(["--icon", "icon.ico"])
-        elif os.path.exists("icon.png"):
-            # Convert PNG to ICO if needed
-            try:
-                from PIL import Image
-                img = Image.open("icon.png")
-                img.save("icon.ico")
-                cmd.extend(["--icon", "icon.ico"])
-                print("[OK] Converted icon.png to icon.ico")
-            except ImportError:
-                print("! PIL not available for icon conversion, using default icon")
-            except Exception as e:
-                print(f"! Failed to convert icon: {e}")
-    
+
+    if not os.path.exists(SPEC_FILE):
+        print(f"[ERROR] {SPEC_FILE} not found. It is tracked in git; run this")
+        print("        script from the repository root.")
+        return False
+
+    cmd = [sys.executable, "-m", "PyInstaller", "--clean", "--noconfirm", SPEC_FILE]
+
     try:
         subprocess.check_call(cmd)
         print("[OK] Executable built successfully")
@@ -116,6 +87,9 @@ def main():
     print("Anime Updater Build Script")
     print("=" * 40)
     
+    if not check_pyside():
+        return False
+
     # Check PyInstaller
     if not check_pyinstaller():
         print("\nBuild failed. Please install PyInstaller manually:")

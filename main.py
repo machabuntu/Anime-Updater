@@ -4,11 +4,9 @@ Shikimori Updater - Main Application Entry Point
 Tracks anime episodes from media players and updates Shikimori list
 """
 
-import tkinter as tk
-from tkinter import ttk, messagebox
-import threading
-import sys
+import argparse
 import os
+import sys
 
 # Handle both development and PyInstaller environments
 def setup_path():
@@ -26,15 +24,9 @@ def setup_path():
         # Add both the main directory and src directory
         if application_path not in sys.path:
             sys.path.insert(0, application_path)
-    
+
     if src_path not in sys.path:
         sys.path.insert(0, src_path)
-    
-    # Debug path information (for development only)
-    # Uncomment for debugging path issues:
-    # print(f"Application path: {application_path}")
-    # print(f"Source path: {src_path}")
-    # print(f"Frozen: {getattr(sys, 'frozen', False)}")
 
 setup_path()
 
@@ -48,51 +40,63 @@ except ImportError as e:
     logging.basicConfig(level=logging.DEBUG)
     logger = logging.getLogger('main')
 
-try:
-    from core.config import Config
-    from gui.main_window import MainWindow
-except ImportError as e:
-    logger.error(f"Failed to import main modules: {e}")
-    messagebox.showerror("Import Error", f"Failed to import required modules: {e}\n\nPlease check the installation.")
-    sys.exit(1)
+
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        prog='anime-updater',
+        description='Track anime and manga progress on Shikimori or MyAnimeList.',
+        add_help=True,
+    )
+    parser.add_argument(
+        '--gallery',
+        action='store_true',
+        help='Open the Qt style gallery (development aid).',
+    )
+    parser.add_argument(
+        '--self-test',
+        action='store_true',
+        help='Build the interface, then exit. Used to smoke test a build.',
+    )
+    args, _unknown = parser.parse_known_args(argv)
+    return args
+
+
+def report_fatal_error(message):
+    """Show a startup failure to the user with whatever toolkit is available."""
+    logger.error(message)
+    try:
+        from PySide6.QtWidgets import QApplication, QMessageBox
+        app = QApplication.instance() or QApplication(sys.argv)
+        QMessageBox.critical(None, 'Anime Updater', message)
+    except Exception:
+        print(message, file=sys.stderr)
+
 
 def main():
     """Main application entry point"""
-    try:
-        # Test logging
-        logger.info("Starting Shikimori Updater application")
-        
-        # Initialize configuration
-        config = Config()
-        
-        # Create main window
-        root = tk.Tk()
-        
-        # Load icon with proper path handling
-        try:
-            if getattr(sys, 'frozen', False):
-                # Running as PyInstaller executable
-                icon_path = os.path.join(sys._MEIPASS, 'icon.png')
-            else:
-                # Running as script
-                icon_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'icon.png')
-            
-            if os.path.exists(icon_path):
-                photo = tk.PhotoImage(file=icon_path)
-                root.wm_iconphoto(False, photo)
-            else:
-                logger.warning(f"Icon file not found at: {icon_path}")
-        except Exception as e:
-            logger.warning(f"Failed to load icon: {e}")
+    args = parse_args()
 
-        app = MainWindow(root, config)
-        
-        # Start the application
-        root.mainloop()
-        
+    try:
+        logger.info("Starting Shikimori Updater application")
+
+        from core.config import Config
+        config = Config()
+
+        from ui import app as qt_app
+
+        if args.gallery:
+            return qt_app.run_gallery()
+
+        if args.self_test:
+            return qt_app.run_self_test(config)
+
+        return qt_app.run(config)
+
     except Exception as e:
-        messagebox.showerror("Error", f"Failed to start application: {str(e)}")
-        sys.exit(1)
+        logger.exception("Failed to start application")
+        report_fatal_error(f"Failed to start application: {e}")
+        return 1
+
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

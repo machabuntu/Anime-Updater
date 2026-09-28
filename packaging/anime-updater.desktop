@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=Anime Updater
+GenericName=Anime and manga tracker
+Comment=Track anime and manga progress on Shikimori or MyAnimeList
+Exec=anime-updater
+Icon=anime-updater
+Terminal=false
+Categories=AudioVideo;Video;Utility;
+Keywords=anime;manga;shikimori;myanimelist;scrobble;
+# Lets the compositor match the window to this entry, which is what gives the
+# application its icon in the task bar and its identity to the XDG portal.
+StartupWMClass=anime-updater

@@ -21,15 +21,20 @@ def build_standalone_updater() -> bool:
         return False
 
     dist_dir = current_dir / "dist"
+    work_dir = current_dir / "build_updater_linux"
+    work_dir.mkdir(exist_ok=True)
 
+    # The generated spec goes next to the build output: it embeds absolute
+    # paths, so it must not land in the repository root where it would be
+    # committed and then break on another machine.
     pyinstaller_cmd = [
         sys.executable, "-m", "PyInstaller",
         "--onefile",
         "--console",
         "--name", "updater_linux",
         "--distpath", str(dist_dir),
-        "--workpath", str(current_dir / "build_updater_linux"),
-        "--specpath", str(current_dir),
+        "--workpath", str(work_dir),
+        "--specpath", str(work_dir),
         "--clean",
         str(updater_script),
     ]

@@ -15,19 +15,36 @@ SPEC_FILE = "anime-updater-linux.spec"
 BINARY_NAME = "anime-updater"
 
 
-def check_tkinter() -> bool:
-    """Verify that tkinter is available (requires python3-tk on most distros)."""
+def check_pyside() -> bool:
+    """Verify PySide6 is installed and ships the platform plugins Qt needs."""
     try:
-        import tkinter  # noqa: F401
-        print("[OK] tkinter is available")
-        return True
+        import PySide6
     except ImportError:
-        print("[ERROR] tkinter is not installed.")
-        print("       Install it with your package manager, e.g.:")
-        print("         Ubuntu/Debian:  sudo apt install python3-tk")
-        print("         Fedora:         sudo dnf install python3-tkinter")
-        print("         Arch:           sudo pacman -S tk")
+        print("[ERROR] PySide6 is not installed.")
+        print("        Install it with:  pip install -r requirements.txt")
         return False
+
+    print(f"[OK] PySide6 {PySide6.__version__} is available")
+
+    plugins = Path(PySide6.__file__).parent / "Qt" / "plugins" / "platforms"
+    if not plugins.is_dir():
+        print(f"[ERROR] Qt platform plugins are missing at {plugins}")
+        return False
+
+    available = sorted(p.stem.removeprefix("libq") for p in plugins.glob("libq*.so"))
+    print(f"[OK] Qt platform plugins: {', '.join(available)}")
+
+    # Without xcb the binary cannot start on X11 or under XWayland, which is
+    # still how most desktops run it.
+    if "xcb" not in available:
+        print("[ERROR] The xcb platform plugin is missing; the binary would not")
+        print("        start on X11. Reinstall PySide6-Essentials.")
+        return False
+
+    if "wayland" not in available:
+        print("[WARN] No wayland plugin; the binary will fall back to XWayland.")
+
+    return True
 
 
 def check_pyinstaller() -> bool:
@@ -50,38 +67,15 @@ def check_pyinstaller() -> bool:
 
 
 def build_executable() -> bool:
-    """Build the Linux binary using the spec file or CLI fallback."""
+    """Build the Linux binary from the spec file."""
     print("\nBuilding Linux binary...")
 
-    if Path(SPEC_FILE).exists():
-        print(f"Using spec file: {SPEC_FILE}")
-        cmd = [
-            "pyinstaller",
-            "--clean",
-            "--noconfirm",
-            SPEC_FILE,
-        ]
-    else:
-        print(f"[WARN] {SPEC_FILE} not found, falling back to CLI build")
-        cmd = [
-            "pyinstaller",
-            "--name", BINARY_NAME,
-            "--onefile",
-            "--windowed",
-            "--clean",
-            "--noconfirm",
-            "--strip",
-            "--add-data", f"src{os.pathsep}src",
-        ]
+    if not Path(SPEC_FILE).exists():
+        print(f"[ERROR] {SPEC_FILE} not found. It is tracked in git; run the")
+        print("        script from the repository root.")
+        return False
 
-        if Path("icon.png").exists():
-            cmd.extend(["--add-data", f"icon.png{os.pathsep}."])
-            cmd.extend(["--icon", "icon.png"])
-        elif Path("icon.ico").exists():
-            cmd.extend(["--add-data", f"icon.ico{os.pathsep}."])
-            cmd.extend(["--icon", "icon.ico"])
-
-        cmd.append("main.py")
+    cmd = [sys.executable, "-m", "PyInstaller", "--clean", "--noconfirm", SPEC_FILE]
 
     try:
         subprocess.check_call(cmd)
@@ -99,15 +93,23 @@ def copy_files():
         print("[ERROR] dist directory not found after build")
         return
 
-    for filename in ("README.md", "requirements.txt"):
-        src = Path(filename)
-        if src.exists():
-            try:
-                dst = dist_dir / src.name
-                dst.write_bytes(src.read_bytes())
-                print(f"[OK] Copied {src.name}")
-            except Exception as exc:  # pylint: disable=broad-except
-                print(f"[WARN] Could not copy {src.name}: {exc}")
+    extras = [
+        Path("README.md"),
+        Path("requirements.txt"),
+        # Installing this entry into ~/.local/share/applications is what gives
+        # the binary an icon in the task bar and an identity to the portal.
+        Path("packaging/anime-updater.desktop"),
+        Path("icon.png"),
+    ]
+
+    for src in extras:
+        if not src.exists():
+            continue
+        try:
+            (dist_dir / src.name).write_bytes(src.read_bytes())
+            print(f"[OK] Copied {src.name}")
+        except OSError as exc:
+            print(f"[WARN] Could not copy {src.name}: {exc}")
 
 
 def main():
@@ -117,7 +119,7 @@ def main():
     if os.name != "posix":
         print("[WARN] This script is intended to run on Linux (posix).")
 
-    if not check_tkinter():
+    if not check_pyside():
         sys.exit(1)
 
     if not check_pyinstaller():

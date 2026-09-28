@@ -52,6 +52,13 @@ class Config:
                 "x": None,
                 "y": None
             },
+            "ui": {
+                # None means "not chosen yet": theme_mode then falls back to the
+                # legacy dark_theme boolean, or to the desktop preference.
+                "theme": None,
+                "minimize_to_tray": False,
+                "close_to_tray": False
+            },
             "telegram": {
                 "enabled": False,
                 "bot_token": "",
@@ -133,6 +140,30 @@ class Config:
         config[keys[-1]] = value
         self.save_config()
     
+    @property
+    def theme_mode(self):
+        """Get the UI theme mode: 'system', 'light' or 'dark'.
+
+        Falls back to the legacy 'ui.dark_theme' boolean so that configs written
+        by older versions keep their appearance, and to 'system' for fresh
+        installs.
+        """
+        mode = self.get('ui.theme')
+        if mode in ('system', 'light', 'dark'):
+            return mode
+
+        legacy = self.get('ui.dark_theme')
+        if legacy is not None:
+            return 'dark' if legacy else 'light'
+
+        return 'system'
+
+    @theme_mode.setter
+    def theme_mode(self, value):
+        if value not in ('system', 'light', 'dark'):
+            raise ValueError(f"Invalid theme mode: {value!r}")
+        self.set('ui.theme', value)
+
     @property
     def active_service(self):
         """Get the currently active anime service ('shikimori' or 'mal')"""

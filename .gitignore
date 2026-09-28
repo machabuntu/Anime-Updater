@@ -24,10 +24,9 @@ share/python-wheels/
 MANIFEST
 
 # PyInstaller
-#  Usually these files are written by a python script from a template
-#  before PyInstaller builds the exe, so as to inject date/other infos into it.
+#  Spec files are tracked on purpose: they are the build configuration and a
+#  clean clone has to be buildable without regenerating them.
 *.manifest
-*.spec
 
 # Installer logs
 pip-log.txt
@@ -131,6 +130,8 @@ config.json
 
 # Build artifacts
 build/
+build_updater/
+build_updater_linux/
 dist/
 releases/
 *.exe
@@ -139,12 +140,12 @@ releases/
 *.deb
 *.rpm
 
-# PyInstaller spec files (keep only the main one)
+# Scratch spec file from an old experiment
 TrayTest.spec
 
-# Test files
-test_*.py
-*_test.py
+# Ad-hoc scripts left in the project root, but not the tests/ package
+/test_*.py
+/*_test.py
 
 # Log files
 *.log

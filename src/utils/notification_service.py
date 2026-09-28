@@ -1,148 +1,147 @@
 """
-Notification Service - Handle system notifications for episode updates
+Desktop notifications for new episodes and finished airings.
+
+Delivery goes through the tray icon first, which gives a native toast on
+Windows and a desktop notification on Linux without any extra dependency. When
+there is no tray (a bare X session, GNOME without the AppIndicator extension)
+a small themed window is shown in the corner instead.
+
+Callers may be on a worker thread, so everything is marshalled onto the GUI
+thread through a signal.
 """
 
-import tkinter as tk
-from tkinter import messagebox
-import threading
-import time
-from typing import Optional, Callable
+from __future__ import annotations
 
-try:
-    # For Windows 10+ toast notifications
-    from win10toast import ToastNotifier
-    TOAST_AVAILABLE = True
-except ImportError:
-    TOAST_AVAILABLE = False
+from typing import Callable, Optional
 
-try:
-    # Alternative notification library
-    import plyer
-    PLYER_AVAILABLE = True
-except ImportError:
-    PLYER_AVAILABLE = False
+from PySide6.QtCore import QObject, QPoint, QTimer, Qt, Signal
+from PySide6.QtGui import QGuiApplication
+from PySide6.QtWidgets import QApplication, QHBoxLayout, QLabel, QPushButton, QVBoxLayout, QWidget
 
-class NotificationService:
-    """Service for displaying system notifications"""
-    
-    def __init__(self):
-        self.toast_notifier = None
-        if TOAST_AVAILABLE:
-            try:
-                self.toast_notifier = ToastNotifier()
-            except:
-                pass
-    
-    def show_episode_notification(self, anime_name: str, episode_number: int, 
-                                callback: Optional[Callable] = None):
-        """Show notification for new episode availability"""
-        title = "New Episode Available!"
-        message = f"{anime_name}\nEpisode {episode_number} is now available"
-        
-        self._show_notification(title, message, callback)
-    
-    def show_release_notification(self, anime_name: str, 
-                                callback: Optional[Callable] = None):
-        """Show notification for anime release completion"""
-        title = "Anime Fully Released!"
-        message = f"{anime_name}\nAll episodes are now available"
-        
-        self._show_notification(title, message, callback)
-    
-    def _show_notification(self, title: str, message: str, 
-                          callback: Optional[Callable] = None):
-        """Show system notification using available method"""
-        def show_notification():
-            success = False
-            
-            # Try Windows 10 toast notification first
-            if self.toast_notifier:
-                try:
-                    self.toast_notifier.show_toast(
-                        title=title,
-                        msg=message,
-                        icon_path=None,
-                        duration=10,
-                        threaded=True
-                    )
-                    success = True
-                except Exception as e:
-                    print(f"Toast notification failed: {e}")
-            
-            # Try plyer notification as fallback
-            if not success and PLYER_AVAILABLE:
-                try:
-                    plyer.notification.notify(
-                        title=title,
-                        message=message,
-                        timeout=10
-                    )
-                    success = True
-                except Exception as e:
-                    print(f"Plyer notification failed: {e}")
-            
-            # Fallback to popup notification
-            if not success:
-                self._show_popup_notification(title, message, callback)
-        
-        # Run notification in separate thread to avoid blocking UI
-        threading.Thread(target=show_notification, daemon=True).start()
-    
-    def _show_popup_notification(self, title: str, message: str, 
-                               callback: Optional[Callable] = None):
-        """Fallback popup notification using tkinter"""
-        def show_popup():
-            # Create a simple notification popup window
-            popup = tk.Toplevel()
-            popup.title(title)
-            popup.geometry("300x150")
-            popup.resizable(False, False)
-            
-            # Position in bottom right corner
-            popup.update_idletasks()
-            x = popup.winfo_screenwidth() - 320
-            y = popup.winfo_screenheight() - 200
-            popup.geometry(f"300x150+{x}+{y}")
-            
-            # Make it stay on top
-            popup.attributes('-topmost', True)
-            
-            # Style the popup
-            popup.configure(bg='#2d2d2d')
-            
-            # Title
-            title_label = tk.Label(popup, text=title, font=('Arial', 12, 'bold'),
-                                 bg='#2d2d2d', fg='white')
-            title_label.pack(pady=(10, 5))
-            
-            # Message
-            message_label = tk.Label(popup, text=message, font=('Arial', 10),
-                                   bg='#2d2d2d', fg='white', wraplength=280)
-            message_label.pack(pady=5)
-            
-            # Close button
-            def close_popup():
-                popup.destroy()
-                if callback:
-                    callback()
-            
-            close_btn = tk.Button(popup, text="OK", command=close_popup,
-                                bg='#0078d4', fg='white', relief='flat',
-                                font=('Arial', 9))
-            close_btn.pack(pady=(10, 5))
-            
-            # Auto-close after 10 seconds
-            popup.after(10000, close_popup)
-            
-            # Focus and bring to front
-            popup.focus_force()
-            popup.lift()
-        
-        # Schedule popup on main thread
-        if hasattr(tk, '_default_root') and tk._default_root:
-            tk._default_root.after(0, show_popup)
-    
+from utils.logger import get_logger
+
+POPUP_TIMEOUT_MS = 10_000
+POPUP_WIDTH = 320
+POPUP_MARGIN = 16
+
+# The tray icon, once the UI installs one. Kept at module level so the service
+# does not need a reference to the main window.
+_tray = None
+
+
+def set_tray(tray) -> None:
+    """Register the tray icon used to deliver notifications."""
+    global _tray
+    _tray = tray
+
+
+class NotificationService(QObject):
+    """Shows a desktop notification, falling back to an in-app popup."""
+
+    _requested = Signal(str, str, object)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.logger = get_logger('notifications')
+        self._popups: list = []
+        self._requested.connect(self._deliver, Qt.QueuedConnection)
+
+    def show_episode_notification(self, anime_name: str, episode_number: int,
+                                  callback: Optional[Callable] = None) -> None:
+        self._requested.emit(
+            'New episode available',
+            f'{anime_name}\nEpisode {episode_number} is out',
+            callback,
+        )
+
+    def show_release_notification(self, anime_name: str,
+                                  callback: Optional[Callable] = None) -> None:
+        self._requested.emit(
+            'Fully released',
+            f'{anime_name}\nEvery episode is available now',
+            callback,
+        )
+
+    def _deliver(self, title: str, message: str, callback: Optional[Callable]) -> None:
+        if _tray is not None and _tray.notify(title, message):
+            if callback:
+                callback()
+            return
+
+        if QApplication.instance() is None:
+            self.logger.info('No GUI available for notification: %s', title)
+            return
+
+        popup = _Popup(title, message, callback)
+        popup.closed.connect(lambda: self._popups.remove(popup))
+        self._popups.append(popup)
+        popup.show_in_corner(len(self._popups) - 1)
+
     @staticmethod
     def is_available() -> bool:
-        """Check if notification service is available"""
-        return TOAST_AVAILABLE or PLYER_AVAILABLE
+        """Notifications always work: there is a popup fallback."""
+        return True
+
+
+class _Popup(QWidget):
+    """A small always-on-top card in the corner of the primary screen."""
+
+    closed = Signal()
+
+    def __init__(self, title: str, message: str,
+                 callback: Optional[Callable] = None) -> None:
+        super().__init__(None, Qt.Tool | Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_ShowWithoutActivating)
+        self.setAttribute(Qt.WA_DeleteOnClose)
+        self.setObjectName('NotificationPopup')
+        self.setFixedWidth(POPUP_WIDTH)
+        self._callback = callback
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(16, 14, 16, 14)
+        layout.setSpacing(6)
+
+        heading = QLabel(title)
+        heading.setObjectName('HeadingLabel')
+        layout.addWidget(heading)
+
+        body = QLabel(message)
+        body.setWordWrap(True)
+        body.setObjectName('SecondaryLabel')
+        layout.addWidget(body)
+
+        buttons = QHBoxLayout()
+        buttons.addStretch(1)
+        dismiss = QPushButton('OK')
+        dismiss.setProperty('accent', True)
+        dismiss.clicked.connect(self.close)
+        buttons.addWidget(dismiss)
+        layout.addLayout(buttons)
+
+        QTimer.singleShot(POPUP_TIMEOUT_MS, self.close)
+
+    def show_in_corner(self, index: int) -> None:
+        """Stack popups upward from the bottom-right of the primary screen."""
+        self.adjustSize()
+        screen = QGuiApplication.primaryScreen()
+        if screen is None:
+            self.show()
+            return
+
+        area = screen.availableGeometry()
+        offset = (self.height() + 8) * index
+        self.move(QPoint(
+            area.right() - self.width() - POPUP_MARGIN,
+            area.bottom() - self.height() - POPUP_MARGIN - offset,
+        ))
+        self.show()
+
+    def closeEvent(self, event) -> None:
+        self.closed.emit()
+        if self._callback:
+            try:
+                self._callback()
+            except Exception:
+                get_logger('notifications').exception('Notification callback failed')
+            self._callback = None
+        super().closeEvent(event)

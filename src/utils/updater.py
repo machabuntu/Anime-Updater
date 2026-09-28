@@ -586,12 +586,13 @@ del "%~f0"
             logger.info(f"  Target EXE: {current_exe_path}")
             
             # Launch the standalone updater with arguments
+            from utils.external import external_env
             subprocess.Popen([
                 updater_exe,
                 "--new-exe", new_exe_path,
                 "--target-exe", current_exe_path,
                 "--wait-timeout", "30"
-            ])
+            ], env=external_env())
             
             logger.info("Standalone updater launched successfully")
             return True

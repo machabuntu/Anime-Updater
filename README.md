@@ -1,326 +1,263 @@
-# Shikimori Updater
+# Anime Updater
 
-**A powerful, modern GUI application for automatically tracking anime episodes and managing your Shikimori list with intelligent scrobbling, smart status management, and comprehensive Telegram notifications.**
+Desktop application that keeps your **Shikimori** or **MyAnimeList** anime and
+manga lists up to date. It watches your media player, matches the file that is
+playing against your list, and bumps the episode count on its own.
 
-![Platform](https://img.shields.io/badge/platform-Windows-blue)
-![Python](https://img.shields.io/badge/python-3.8%2B-green)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-blue)
+![Python](https://img.shields.io/badge/python-3.10%2B-green)
+![Qt](https://img.shields.io/badge/GUI-PySide6-41cd52)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
-## 🌟 Key Features
+## Features
 
-### 🎯 **Intelligent Anime Management**
-- **Modern Tab-based Interface** - Separate tabs for Watching, Completed, Plan to Watch, On Hold, Dropped, and Rewatching
-- **Smart Status Transitions** - Automatically moves anime from "Plan to Watch" to "Watching" when progress increases
-- **Dual List Support** - Full anime and manga list management with dedicated interfaces
-- **Dynamic Progress Tracking** - Real-time episode/chapter counters with instant UI updates
-- **Enhanced Search & Add** - Find and add anime/manga with duplicate detection and smart filtering
+### List management
 
-### 🤖 **Automatic Scrobbling System**
-- **Media Player Integration** - Monitors PotPlayer (all variants) for opened video files
-- **Smart Episode Detection** - Advanced regex-based parsing of anime names and episode numbers
-- **Intelligent Matching** - Uses synonyms, alternative titles, and fuzzy matching with 85%+ accuracy
-- **Progress Validation** - Only updates if detected episode is exactly +1 from current progress
-- **Auto-completion** - Automatically marks anime as completed when final episode is watched
+- Anime and manga in separate tabs, each split by status with live counters
+- Filters for name, year, type and score; click any column header to sort
+- Quick controls in the toolbar edit the selected title without opening a dialog
+- Double-click a row for the full edit dialog (episodes, status, score, rewatches)
+- Search and add new titles, with entries already on your list dimmed out
+- Seasonal browser for finding what is airing this season
 
-### 📊 **Advanced Status Management**
-- **Rewatching Support** - Auto-resets episodes to 0 and tracks rewatch count
-- **Score-based Completion** - Auto-completes anime when max episodes reached and score is set
-- **Status Change Tracking** - Comprehensive logging of all status transitions
-- **Manual Override** - Full manual control over episodes, scores, and status
+### Automatic scrobbling
 
-### 🔔 **Telegram Integration**
-- **Progress Notifications** - Real-time updates when episodes are watched
-- **Completion Alerts** - Notifications when anime/manga are completed
-- **Status Change Updates** - Alerts for drops, rewatching, and other status changes
-- **Rich Formatting** - HTML-formatted messages with clickable anime links
-- **Granular Control** - Individual toggles for different notification types
+- Detects PotPlayer on Windows and mpv or Celluloid on Linux
+- Parses the anime name and episode number out of the file name, then matches it
+  against your list using synonyms and fuzzy comparison
+- Updates only when the detected episode is exactly one past your current
+  progress, so a random file cannot corrupt your list
+- Moves a title from *Plan to Watch* to *Watching* on the first episode, and
+  marks it *Completed* on the last one
+- A companion browser extension can report progress from streaming sites through
+  the local API
 
-### ⚡ **Performance & Caching**
-- **Intelligent Caching** - Local cache system for instant startup and reduced API calls
-- **Synonym Database** - Enhanced matching using comprehensive title databases
-- **Efficient Updates** - Cache-based updates instead of full API refreshes
-- **Background Syncing** - Non-blocking API operations for smooth user experience
+### Notifications
 
-### 🎨 **Modern UI/UX**
-- **Dark/Light Themes** - Toggle between modern dark and light interfaces
-- **System Tray Support** - Minimize to tray with full control menu
-- **Compact Controls** - Streamlined progress controls in the main toolbar
-- **Non-intrusive Feedback** - Status messages instead of blocking dialogs
-- **Windows Integration** - Optional startup with Windows and modern styling
+- Desktop notifications for new episodes and for series that finish airing
+- Optional Telegram messages, with separate switches for progress, completions,
+  drops and rewatches
 
-## 📋 System Requirements
+### Interface
 
-- **Operating System:** Windows 10/11 (required for PotPlayer integration)
-- **Python:** 3.8 or higher
-- **Internet:** Active connection for Shikimori API
-- **Media Player:** PotPlayer (any variant) for automatic scrobbling
-- **Account:** Active Shikimori account
+- Light and dark themes, plus a *system* mode that follows the desktop
+- System tray icon with minimise-to-tray and close-to-tray
+- Local cache means the window opens with your list already populated
 
-## 🚀 Quick Start
+## Requirements
 
-### Option 1: Pre-built Executable (Recommended)
+- Windows 10/11 or Linux
+- Python 3.10 or newer, only when running from source
+- A Shikimori or MyAnimeList account
 
-1. **Download** the latest release from GitHub
-2. **Extract** the ZIP file to your desired location
-3. **Run** `Shikimori Updater.exe`
-4. **Follow** the setup wizard for first-time configuration
+On Linux the tray icon needs a desktop that implements the StatusNotifierItem
+specification. KDE and most others do; GNOME needs the AppIndicator extension.
 
-### Option 2: Run from Source
+## Installing
+
+### Pre-built binary
+
+Download the latest release, then:
+
+**Windows** — run `Anime Updater.exe`.
+
+**Linux** — make the file executable and run it. To get a menu entry and a
+proper task bar icon, install the desktop file that ships next to it:
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/ShikimoriUpdater.git
-cd ShikimoriUpdater
+chmod +x anime-updater
+mkdir -p ~/.local/bin ~/.local/share/applications ~/.local/share/icons
+cp anime-updater ~/.local/bin/
+cp icon.png ~/.local/share/icons/anime-updater.png
+cp anime-updater.desktop ~/.local/share/applications/
+```
 
-# Install dependencies
+### From source
+
+```bash
+git clone https://github.com/machabuntu/Shikimori-Updater.git
+cd Shikimori-Updater
+
+python -m venv venv
+source venv/bin/activate        # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Run the application
 python main.py
 ```
 
-### Option 3: Build Your Own Executable
+### Building a binary yourself
 
 ```bash
-# Auto-build with included script
-python build.py
-
-# Or build manually
 pip install pyinstaller
-pyinstaller "Shikimori Updater.spec"
+
+python build.py          # Windows -> dist/Anime Updater.exe
+python build_linux.py    # Linux   -> dist/anime-updater
 ```
 
-## ⚙️ Initial Setup
+Both scripts read the spec files tracked in the repository. The result is a
+single file of roughly 75 MB; most of that is Qt.
 
-### 1. Create Shikimori API Application
+A GitHub release that the in-app updater can install is a zip named
+`Anime_Updater_{version}_Windows.zip` or `Anime_Updater_{version}_Linux.zip`,
+with the binary above sitting at the root of the archive. The release scripts
+build that zip (and bump `src/utils/version.py`):
 
-1. Visit [Shikimori OAuth Applications](https://shikimori.io/oauth/applications)
-2. Click **"New Application"**
-3. Configure your application:
-   - **Name:** `Shikimori Updater` (or your preferred name)
-   - **Redirect URI:** `http://localhost:8080/callback`
-   - **Scopes:** `user_rates` (required for list management)
-4. **Save** and copy your `Client ID` and `Client Secret`
-
-### 2. First-Time Authentication
-
-1. **Launch** Shikimori Updater
-2. **Click** "Menu" → "Authentication..."
-3. **Enter** your Client ID and Client Secret
-4. **Click** "Start Authorization" (opens browser)
-5. **Authorize** the application on Shikimori
-6. **Copy** the authorization code from the redirect URL
-7. **Paste** the code and click "Complete Authorization"
-8. **Save** your credentials
-
-### 3. Optional: Configure Telegram Notifications
-
-1. **Create** a Telegram bot via [@BotFather](https://t.me/botfather)
-2. **Get** your bot token and chat/channel ID
-3. **Open** Menu → Options → Notifications tab
-4. **Enable** Telegram notifications and enter your credentials
-5. **Choose** which events to receive notifications for
-
-## 📖 Usage Guide
-
-### Anime & Manga List Management
-
-- **View Lists:** Switch between "Anime List" and "Manga List" tabs
-- **Filter by Status:** Use status tabs (Watching, Completed, etc.)
-- **Search:** Use the search box to find specific titles
-- **Quick Edit:** Use compact controls in the toolbar for selected anime
-- **Bulk Operations:** Right-click for context menus and batch actions
-
-### Automatic Scrobbling
-
-1. **Enable Monitoring:** Menu → "Start/Stop Scrobbling"
-2. **Open Videos:** Play anime episodes in PotPlayer
-3. **Watch:** After 1+ minutes of viewing, progress updates automatically
-4. **Verification:** Only episodes that are +1 from current progress are counted
-5. **Completion:** Anime auto-completes when final episode is watched (if scored)
-
-### Adding New Content
-
-1. **Search Tab:** Use "Search & Add" to find new anime/manga
-2. **Select Status:** Choose which list to add content to
-3. **Quick Add:** Double-click entries for instant addition
-4. **Smart Filtering:** Already-owned content is automatically hidden
-
-### Manual Progress Control
-
-- **Episode/Chapter Controls:** Use +/- buttons or direct entry
-- **Score Management:** Select scores from dropdown (1-10 or remove)
-- **Status Changes:** Use status dropdown for manual transitions
-- **Batch Updates:** Select multiple items for bulk operations
-
-## 📁 Project Structure
-
-```
-ShikimoriUpdater/
-├── main.py                          # Application entry point
-├── build.py                         # Automated build script
-├── setup.py                         # Installation helper
-├── requirements.txt                 # Python dependencies
-├── Shikimori Updater.spec          # PyInstaller configuration
-│
-├── src/
-│   ├── core/
-│   │   ├── config.py               # Configuration management
-│   │   └── cache.py                # Intelligent caching system
-│   │
-│   ├── api/
-│   │   └── shikimori_client.py     # Shikimori API integration
-│   │
-│   ├── gui/
-│   │   ├── main_window.py          # Main application window
-│   │   ├── anime_list_frame.py     # Anime list interface
-│   │   ├── manga_list_frame.py     # Manga list interface
-│   │   ├── search_frame.py         # Search and add functionality
-│   │   ├── options_dialog.py       # Settings configuration
-│   │   ├── auth_dialog.py          # Authentication dialogs
-│   │   └── modern_style.py         # UI theming system
-│   │
-│   └── utils/
-│       ├── player_monitor.py       # Media player detection
-│       ├── anime_matcher.py        # Basic name matching
-│       ├── enhanced_anime_matcher.py # Advanced synonym matching
-│       ├── telegram_notifier.py    # Telegram integration
-│       ├── notification_manager.py # Notification system
-│       └── logger.py               # Logging framework
+```bash
+python build_release.py 4.1.0         # Windows
+python build_release_linux.py 4.1.0   # Linux
 ```
 
-## 🔧 Configuration
+The self-updater is a second, separate binary, built so that replacing the main
+executable does not fight with PyInstaller's temporary extraction directory.
+The release scripts build it too; to build it alone:
 
-### Configuration Files
-- **Main Config:** `~/.shikimori_updater/config.json`
-- **Cache Location:** `%LOCALAPPDATA%/ShikimoriUpdater/cache/`
-- **Logs:** Application logs are stored in the cache directory
+```bash
+python build_updater.py        # Windows
+python build_updater_linux.py  # Linux
+```
 
-### Key Settings
+## Setup
+
+### Shikimori
+
+Shikimori credentials are built in, so signing in is just **Menu → Sign in**,
+which opens your browser and captures the redirect automatically.
+
+To use your own API application instead, register one at
+[Shikimori OAuth Applications](https://shikimori.one/oauth/applications) with
+the redirect URI `http://localhost:8080/callback` and the `user_rates` scope,
+then enter the client ID and secret in **Menu → Options → Main**.
+
+### MyAnimeList
+
+MyAnimeList has no shared credentials, so you need your own:
+
+1. Open [MyAnimeList API settings](https://myanimelist.net/apiconfig) and create
+   a client
+2. Set the redirect URI to `http://localhost:8080/callback`
+3. Copy the client ID into **Menu → Options → Main**, switch *Active service* to
+   MyAnimeList, and leave the secret empty for a public client
+4. Sign in from the menu
+
+### Telegram (optional)
+
+Create a bot with [@BotFather](https://t.me/botfather), then put the bot token
+and your chat ID into **Menu → Options → Notifications** and pick the events you
+want to hear about.
+
+## Usage
+
+**Scrobbling.** Turn it on with **Menu → Start Scrobbling**, then play an
+episode. After a minute of playback the episode is committed. Only an episode
+exactly one ahead of your current progress counts, so skipping around in a
+series does not touch your list.
+
+**Adding titles.** The *Search & Add* tab searches the service directly; pick a
+status and add. The *Seasonal Anime* tab lists a whole season at once and adds
+straight to *Plan to Watch*.
+
+**Editing.** Select a row and use the toolbar controls, or double-click it for
+the full dialog. Right-click gives status changes, comments, opening the page in
+a browser, and removal.
+
+## Configuration
+
+| What | Where |
+| --- | --- |
+| Settings | `~/.shikimori_updater/config.json` |
+| Cache and logs | `%LOCALAPPDATA%\ShikimoriUpdater` (Windows), `~/.local/share/ShikimoriUpdater` (Linux) |
+
+Most settings have a control in the options dialog. The two that do not are the
+player list and the scrobble delay:
+
 ```json
 {
   "monitoring": {
-    "auto_start": false,
     "min_watch_time": 60,
-    "supported_players": ["PotPlayer64.exe", "PotPlayer.exe", "PotPlayerMini64.exe", "PotPlayerMini.exe"]
+    "supported_players": [
+      "PotPlayerMini64.exe", "PotPlayer64.exe", "mpv", "celluloid"
+    ]
   },
   "ui": {
-    "dark_theme": false,
+    "theme": "system",
     "minimize_to_tray": false,
     "close_to_tray": false
-  },
-  "telegram": {
-    "enabled": false,
-    "send_progress": false,
-    "send_completed": true,
-    "send_dropped": false,
-    "send_rewatching": false
   }
 }
 ```
 
-## 🎯 Supported Media Players
+Adding a player is a matter of appending its process name to
+`supported_players`; anything that puts the file name in its window title works.
 
-- **PotPlayer** (64-bit and 32-bit)
-- **PotPlayerMini** (64-bit and 32-bit)
+## Project layout
 
-*Note: Additional players can be added by modifying the configuration.*
+```
+main.py                      entry point and argument parsing
+build.py, build_linux.py     PyInstaller drivers
+*.spec                       build configuration, tracked on purpose
 
-## 🔍 Troubleshooting
-
-### Common Issues
-
-**Authentication Problems:**
-- Verify Client ID and Client Secret are correct
-- Ensure redirect URI is exactly `http://localhost:8080/callback`
-- Check that `user_rates` scope is granted
-
-**Scrobbling Not Working:**
-- Confirm PotPlayer is running and supported
-- Check that anime files use standard naming conventions
-- Verify the anime exists in your Shikimori list
-- Ensure Windows process access permissions
-
-**Episode Detection Issues:**
-- Use standard naming: `[Group] Anime Name - Episode ## [Quality]`
-- Avoid special characters in episode numbers
-- Check that episode number is +1 from current progress
-
-**Performance Issues:**
-- Clear cache: Menu → "Clear Cache"
-- Refresh synonyms: Menu → "Refresh Synonyms"
-- Check internet connection stability
-
-### Debug Information
-- **Logs:** Menu → "View Logs" for detailed error information
-- **Version:** Check title bar for current version
-- **Cache Status:** Monitor status bar for cache operations
-
-## 🤝 Contributing
-
-We welcome contributions! Please:
-
-1. **Fork** the repository
-2. **Create** a feature branch (`git checkout -b feature/amazing-feature`)
-3. **Commit** your changes (`git commit -m 'Add amazing feature'`)
-4. **Push** to the branch (`git push origin feature/amazing-feature`)
-5. **Open** a Pull Request
-
-### Development Setup
-```bash
-# Clone and setup development environment
-git clone https://github.com/yourusername/ShikimoriUpdater.git
-cd ShikimoriUpdater
-pip install -r requirements.txt
-
-# Run in development mode
-python main.py
+src/api/                     Shikimori and MyAnimeList clients
+src/core/                    config, cache, and the framework-agnostic services
+    clients.py                 picks the client for the active service
+    library.py                 loading, caching and matching list entries
+    scrobble.py                deciding whether an episode counts
+    updates.py                 release checks
+    autostart.py               launch on login
+src/ui/                      the Qt interface
+    theme/                     colour tokens, the QSS template, ThemeManager
+    views/                     the four list tabs
+    dialogs/                   options, sign-in, edit, comment, update, logs
+    controller.py              bridges the interface to the services
+    workers.py                 background work on a QThreadPool
+src/utils/                   player monitoring, matching, Telegram, logging
+tests/                       unit tests for the core services
+tools/check_imports.py       imports every module, used by CI
 ```
 
-## 📄 License
+## Development
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+```bash
+pip install -r requirements.txt
 
-## 🙏 Acknowledgments
+python -m unittest discover -s tests    # unit tests
+python tools/check_imports.py           # every module imports cleanly
+python main.py --self-test              # build the whole interface, then exit
+python main.py --gallery                # every styled widget on one screen
+```
 
-- **[Shikimori](https://shikimori.io)** - Excellent anime database and API
-- **[PotPlayer](https://potplayer.daum.net)** - Fantastic media player for anime
-- **The Anime Community** - Inspiration and feedback
-- **Contributors** - Everyone who helped improve this project
+`--gallery` is the fastest way to check a stylesheet change: it renders every
+widget the application uses, and `SHIKI_THEME=dark` switches which palette it
+starts in.
 
-## 📞 Support
+Colours live in `src/ui/theme/tokens.py` and are substituted into
+`src/ui/theme/app.qss` wherever a `@token` appears, so a palette change is one
+edit in one file.
 
-Need help? Here's how to get support:
+GitHub Actions runs the tests and builds both binaries on every push.
 
-1. **Check** the troubleshooting section above
-2. **Review** application logs (Menu → "View Logs")
-3. **Search** existing GitHub issues
-4. **Create** a new issue with:
-   - Detailed error description
-   - Steps to reproduce
-   - System information (Windows version, Python version)
-   - Relevant log excerpts (remove sensitive data)
+## Troubleshooting
 
-## 🚀 Changelog
+**Sign-in fails.** Check that the redirect URI on the service side is exactly
+`http://localhost:8080/callback`, and that nothing else is holding port 8080.
 
-### v3.0.0 (Latest)
-- ✨ **Smart Status Transitions** - Auto-move from "Plan to Watch" to "Watching"
-- 📱 **Telegram Integration** - Rich notifications with granular controls
-- 📚 **Manga Support** - Full manga list management with chapter/volume tracking
-- 🎨 **Enhanced UI** - Modern dark/light themes with improved layouts
-- ⚡ **Performance Boost** - Optimized caching and background operations
-- 🔍 **Advanced Matching** - Synonym support for better anime detection
-- 🔧 **System Integration** - Tray support, startup options, and Windows integration
+**Scrobbling does nothing.** Confirm the player's process name is in
+`supported_players`, that the file name follows a recognisable pattern such as
+`[Group] Anime Name - 05 [1080p]`, and that the title is already on your list at
+episode 4. **Menu → View Logs** shows what was parsed and what it matched.
 
-### v2.0.0
-- 🏗️ **Complete Rewrite** - Modern architecture with improved reliability
-- 📑 **Tab-based Interface** - Organized status management
-- 💾 **Smart Caching** - Intelligent local data management
-- 🔄 **Rewatching Support** - Comprehensive rewatch tracking
-- 🎯 **Enhanced Accuracy** - Improved episode detection algorithms
+**No tray icon on Linux.** On GNOME, install the AppIndicator extension. The
+application still runs without a tray; it just cannot minimise into one.
 
-### v1.0.0
-- 🎉 **Initial Release** - Core functionality implementation
-- 🔐 **OAuth Integration** - Secure Shikimori authentication
-- 📺 **Basic Scrobbling** - PotPlayer integration
-- 📋 **List Management** - Basic anime list operations
+**The list looks stale.** **Menu → Refresh List** forces a reload from the API
+instead of the cache.
+
+## Licence
+
+MIT, see [LICENSE](LICENSE). The published binaries link Qt dynamically through
+PySide6 under the LGPL.
+
+## Acknowledgements
+
+- [Shikimori](https://shikimori.one) and [MyAnimeList](https://myanimelist.net)
+  for their APIs
+- [Qt](https://www.qt.io) and PySide6 for the interface toolkit
