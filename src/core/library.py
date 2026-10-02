@@ -249,32 +249,24 @@ class LibraryService:
 
     def find_anime_entry(self, anime_id: int) -> Optional[Dict[str, Any]]:
         """Locate a list entry by its rate id."""
-        for status_entries in self.anime_list_data.values():
-            for entry in status_entries:
-                if entry.get('id') == anime_id:
-                    return entry
-        return None
+        return _find_entry(self.anime_list_data, anime_id)
 
-    def move_anime_entry(self, entry: Dict[str, Any], new_status: str) -> None:
+    def find_manga_entry(self, manga_id: int) -> Optional[Dict[str, Any]]:
+        return _find_entry(self.manga_list_data, manga_id)
+
+    def move_anime_entry(self, entry: Dict[str, Any], new_status: str) -> Dict[str, Any]:
         """Move an entry between status buckets, keeping the data consistent.
 
         The tkinter code mutated ``entry['status']`` without moving the entry
         between buckets, so a scrobble that completed a series left it filed
-        under Watching until the next full refresh.
+        under Watching until the next full refresh. Returns the entry that is
+        now in the list, which differs from ``entry`` when that was a stale
+        copy from before a reload.
         """
-        old_status = None
-        for status_key, entries in self.anime_list_data.items():
-            if entry in entries:
-                old_status = status_key
-                break
+        return _move_entry(self.anime_list_data, entry, new_status)
 
-        entry['status'] = new_status
-        if old_status == new_status:
-            return
-
-        if old_status is not None:
-            self.anime_list_data[old_status].remove(entry)
-        self.anime_list_data.setdefault(new_status, []).append(entry)
+    def move_manga_entry(self, entry: Dict[str, Any], new_status: str) -> Dict[str, Any]:
+        return _move_entry(self.manga_list_data, entry, new_status)
 
     # ------------------------------------------------------------- internals --
 
@@ -289,6 +281,36 @@ class LibraryService:
     def set_cache_updated_callback(self, callback: Callable[[], None]) -> None:
         """Called by the matcher when it refreshes airing status in background."""
         self.matcher.set_cache_updated_callback(callback)
+
+
+def _find_entry(data: ListData, entry_id: Any) -> Optional[Dict[str, Any]]:
+    for entries in data.values():
+        for entry in entries:
+            if entry.get('id') == entry_id:
+                return entry
+    return None
+
+
+def _move_entry(data: ListData, entry: Dict[str, Any], new_status: str) -> Dict[str, Any]:
+    """Refile an entry under ``new_status``, matching it by id.
+
+    Matching by id rather than identity matters: after a list reload the
+    caller may still hold the old dict, and moving that one would leave the
+    real entry behind in its old bucket and add a duplicate to the new one.
+    """
+    entry_id = entry.get('id')
+    for status_key, entries in data.items():
+        for index, candidate in enumerate(entries):
+            if candidate is entry or candidate.get('id') == entry_id:
+                candidate['status'] = new_status
+                if status_key != new_status:
+                    del entries[index]
+                    data.setdefault(new_status, []).append(candidate)
+                return candidate
+
+    entry['status'] = new_status
+    data.setdefault(new_status, []).append(entry)
+    return entry
 
 
 def _count(data: ListData) -> int:

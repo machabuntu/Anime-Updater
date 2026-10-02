@@ -19,6 +19,7 @@ from PySide6.QtCore import QObject, QTimer, Signal
 
 from core.clients import create_client
 from core.library import LibraryService, ListLoadResult
+from core.list_edits import NOTIFY_COMPLETED, NOTIFY_STATUS_CHANGE, AnimeEdit, plan_anime_edit
 from core.scrobble import ScrobbleOutcome, ScrobbleResult, ScrobbleService
 from core.updates import UpdateService
 from ui import workers
@@ -375,53 +376,95 @@ class AppController(QObject):
     def update_anime(self, entry: Dict[str, Any], episodes: Optional[int] = None,
                      status: Optional[str] = None, score: Optional[int] = None,
                      rewatches: Optional[int] = None) -> None:
-        """Push a manual anime edit, then reflect it locally."""
+        """Push a manual anime edit, then reflect it locally.
+
+        ``entry`` may be a stale copy held by a view since the last reload;
+        the live entry is looked up by id both before and after the request.
+        """
         rate_id = entry['id']
+        entry = self.library.find_anime_entry(rate_id) or entry
         name = entry.get('anime', {}).get('name', 'anime')
+
+        edit = plan_anime_edit(entry, episodes=episodes, status=status,
+                               score=score, rewatches=rewatches)
+        if edit.is_empty:
+            self.anime_entry_changed.emit(entry)
+            return
 
         def work() -> bool:
             return self.client.update_anime_progress(
                 rate_id,
-                episodes if episodes is not None else entry.get('episodes', 0),
-                status=status,
-                score=score,
-                rewatches=rewatches,
+                edit.episodes if edit.episodes is not None else entry.get('episodes', 0),
+                status=edit.status,
+                score=edit.score,
+                rewatches=edit.rewatches,
             )
 
         def done(ok: bool) -> None:
+            live = self.library.find_anime_entry(rate_id) or entry
             if not ok:
                 self.status_message.emit(f'Failed to update {name}', True)
+                # Puts the panel back to the stored values.
+                self.anime_entry_changed.emit(live)
                 return
 
-            updates: Dict[str, Any] = {}
-            if episodes is not None:
-                entry['episodes'] = episodes
-                updates['episodes'] = episodes
-            if score is not None:
-                entry['score'] = score
-                updates['score'] = score
-            if rewatches is not None:
-                entry['rewatches'] = rewatches
-                updates['rewatches'] = rewatches
-            if status is not None:
-                self.library.move_anime_entry(entry, status)
-                updates['status'] = status
+            for key, value in edit.updates().items():
+                if key != 'status':
+                    live[key] = value
+            if edit.status is not None:
+                live = self.library.move_anime_entry(live, edit.status)
 
             self.library.save_anime_cache()
-            self.status_message.emit(f'Updated {name}', True)
-            if status is not None:
+            self.status_message.emit(_describe_anime_edit(name, edit), True)
+            self._notify_anime_edit(live, edit)
+
+            if edit.status is not None:
                 self.anime_list_changed.emit()
             else:
-                self.anime_entry_changed.emit(entry)
+                self.anime_entry_changed.emit(live)
 
-        workers.run_async(work, on_success=done, on_error=self._emit_error)
+        def failed(message: str) -> None:
+            self._emit_error(message)
+            self.anime_entry_changed.emit(self.library.find_anime_entry(rate_id) or entry)
+
+        workers.run_async(work, on_success=done, on_error=failed)
+
+    def _notify_anime_edit(self, entry: Dict[str, Any], edit: AnimeEdit) -> None:
+        """Announce a manual completion, drop or rewatch in Telegram."""
+        if edit.notification is None or not self.telegram_notifier:
+            return
+
+        anime = entry.get('anime', {})
+        name = anime.get('name', 'Unknown')
+        url = anime.get('url', '')
+        score = entry.get('score', 0) or 0
+        comment = entry.get('text', '') or entry.get('text_html', '') or ''
+        username = self.library.username
+
+        try:
+            if edit.notification == NOTIFY_COMPLETED:
+                self.telegram_notifier.send_completion_update(
+                    name, score, username, edit.is_rewatch,
+                    entry.get('rewatches', 0) if edit.is_rewatch else 0, url, comment,
+                )
+            elif edit.notification == NOTIFY_STATUS_CHANGE:
+                previous = self.client.STATUSES.get(edit.previous_status, edit.previous_status)
+                self.telegram_notifier.send_status_change_update(
+                    name, previous, edit.status, score, username, url, comment,
+                )
+        except Exception:
+            # A failed notification must never undo a successful list update.
+            self.logger.exception('Failed to send Telegram notification for %s', name)
 
     def update_manga(self, entry: Dict[str, Any], chapters: Optional[int] = None,
                      volumes: Optional[int] = None, status: Optional[str] = None,
                      score: Optional[int] = None) -> None:
         """Push a manual manga edit, then reflect it locally."""
         rate_id = entry['id']
+        entry = self.library.find_manga_entry(rate_id) or entry
         name = entry.get('manga', {}).get('name', 'manga')
+        if status == entry.get('status'):
+            status = None
 
         def work() -> bool:
             return self.client.update_manga_progress(
@@ -433,24 +476,30 @@ class AppController(QObject):
             )
 
         def done(ok: bool) -> None:
+            live = self.library.find_manga_entry(rate_id) or entry
             if not ok:
                 self.status_message.emit(f'Failed to update {name}', True)
+                self.manga_list_changed.emit()
                 return
 
             if chapters is not None:
-                entry['chapters'] = chapters
+                live['chapters'] = chapters
             if volumes is not None:
-                entry['volumes'] = volumes
+                live['volumes'] = volumes
             if score is not None:
-                entry['score'] = score
+                live['score'] = score
             if status is not None:
-                entry['status'] = status
+                self.library.move_manga_entry(live, status)
 
             self.library.save_manga_cache()
             self.status_message.emit(f'Updated {name}', True)
             self.manga_list_changed.emit()
 
-        workers.run_async(work, on_success=done, on_error=self._emit_error)
+        def failed(message: str) -> None:
+            self._emit_error(message)
+            self.manga_list_changed.emit()
+
+        workers.run_async(work, on_success=done, on_error=failed)
 
     def remove_anime(self, entry: Dict[str, Any]) -> None:
         rate_id = entry['id']
@@ -498,11 +547,12 @@ class AppController(QObject):
                 self.status_message.emit('Failed to save comment', True)
                 return
 
-            entry['text'] = text
-            entry['text_html'] = text
+            live = self.library.find_anime_entry(rate_id) or entry
+            live['text'] = text
+            live['text_html'] = text
             self.library.save_anime_cache()
             self.status_message.emit('Comment saved', True)
-            self.anime_entry_changed.emit(entry)
+            self.anime_entry_changed.emit(live)
 
             if text and self.telegram_notifier:
                 try:
@@ -525,8 +575,9 @@ class AppController(QObject):
             if not ok:
                 self.status_message.emit('Failed to save comment', True)
                 return
-            entry['text'] = text
-            entry['text_html'] = text
+            live = self.library.find_manga_entry(rate_id) or entry
+            live['text'] = text
+            live['text_html'] = text
             self.library.save_manga_cache()
             self.status_message.emit('Comment saved', True)
 
@@ -779,3 +830,26 @@ class AppController(QObject):
 
 def _total(data: Dict[str, List[Dict[str, Any]]]) -> int:
     return sum(len(entries) for entries in data.values())
+
+
+def _describe_anime_edit(name: str, edit: AnimeEdit) -> str:
+    """Status bar text in the wording the tkinter version used."""
+    if edit.status is not None and not edit.auto_status:
+        message = f'Changed {name} status to {edit.status.replace("_", " ").title()}'
+        if edit.status == 'rewatching' and edit.episodes == 0:
+            message += ' (episodes reset to 0)'
+        return message
+
+    if edit.score is not None and edit.episodes is None:
+        message = (f'Set {name} score to {edit.score}' if edit.score
+                   else f'Removed score for {name}')
+    elif edit.episodes is not None:
+        message = f'Updated {name} to episode {edit.episodes}'
+    else:
+        message = f'Updated {name}'
+
+    if edit.status == 'completed':
+        message += ' (Completed)'
+    elif edit.status == 'watching':
+        message += ' (Moved to Watching)'
+    return message

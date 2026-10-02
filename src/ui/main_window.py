@@ -298,21 +298,32 @@ class MainWindow(QMainWindow):
 
     def _on_manga_list_changed(self) -> None:
         self.manga_view.set_data(self.controller.get_manga_list_data())
+        self._resync_selection()
 
     def _on_anime_entry_changed(self, entry: Dict[str, Any]) -> None:
         self.anime_view.refresh_entry(entry)
-        if self.selection_panel.entry is entry:
+        panel_entry = self.selection_panel.entry
+        if (self.selection_panel.mode == 'anime' and panel_entry is not None
+                and panel_entry.get('id') == entry.get('id')):
             self.selection_panel.show_anime(entry)
 
     def _resync_selection(self) -> None:
-        """Re-read the panel after the underlying list was rebuilt."""
+        """Re-read the panel after the underlying list was rebuilt.
+
+        A reload replaces every entry dict, so the panel's entry is looked up
+        again by id; editing the old dict would change nothing that is shown
+        or saved.
+        """
         entry = self.selection_panel.entry
         if entry is None:
             return
+        library = self.controller.library
         if self.selection_panel.mode == 'anime':
-            self.selection_panel.show_anime(entry)
+            live = library.find_anime_entry(entry.get('id'))
+            self.selection_panel.show_anime(live)
         else:
-            self.selection_panel.show_manga(entry)
+            live = library.find_manga_entry(entry.get('id'))
+            self.selection_panel.show_manga(live)
 
     def _on_tab_changed(self, index: int) -> None:
         """Show the panel for whichever list the user is looking at."""
@@ -343,9 +354,7 @@ class MainWindow(QMainWindow):
         if entry is None:
             return
         if self.selection_panel.mode == 'anime':
-            # Rewatching restarts progress, as in the tkinter version.
-            episodes = 0 if status == 'rewatching' else None
-            self.controller.update_anime(entry, status=status, episodes=episodes)
+            self.controller.update_anime(entry, status=status)
         else:
             self.controller.update_manga(entry, status=status)
 

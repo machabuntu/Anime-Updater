@@ -20,6 +20,7 @@ from enum import Enum
 from typing import Any, Dict, Optional
 
 from core.library import LibraryService
+from core.list_edits import plan_anime_edit
 from utils.logger import get_logger
 
 
@@ -127,21 +128,27 @@ class ScrobbleService:
             return ScrobbleResult(ScrobbleOutcome.NOT_NEXT_EPISODE, message, entry)
 
         previous_status = entry.get('status', '')
-        new_status = self._next_status(entry, anime, episode)
+        edit = plan_anime_edit(entry, episodes=episode)
+        new_status = edit.status
+        self._log_status_decision(entry, anime, episode, new_status)
 
         self.logger.info(
             'Updating anime progress: %s -> episode %s%s',
             anime_name, episode, f', status: {new_status}' if new_status else '',
         )
-        if not self.library.client.update_anime_progress(rate_id, episode, status=new_status):
+        extra = {'rewatches': edit.rewatches} if edit.rewatches is not None else {}
+        if not self.library.client.update_anime_progress(
+                rate_id, episode, status=new_status, **extra):
             message = f'Failed to update {anime_name}'
             self.logger.error('Anime progress update failed: %s', message)
             return ScrobbleResult(ScrobbleOutcome.UPDATE_FAILED, message, entry)
 
         self._committed.add(commit_key)
         entry['episodes'] = episode
+        if edit.rewatches is not None:
+            entry['rewatches'] = edit.rewatches
         if new_status:
-            self.library.move_anime_entry(entry, new_status)
+            entry = self.library.move_anime_entry(entry, new_status)
         self.library.save_anime_cache()
 
         self._notify(entry, anime, anime_name, episode, previous_status, new_status)
@@ -157,32 +164,18 @@ class ScrobbleService:
 
     # ------------------------------------------------------------- internals --
 
-    def _next_status(self, entry: Dict[str, Any], anime: Dict[str, Any],
-                     episode: int) -> Optional[str]:
-        """Decide whether this episode also changes the entry's status.
-
-        Starting a planned title moves it to watching. Reaching the final
-        episode completes it, but only when a score is already set, so the user
-        is not left with a completed entry they never rated.
-        """
+    def _log_status_decision(self, entry: Dict[str, Any], anime: Dict[str, Any],
+                             episode: int, new_status: Optional[str]) -> None:
+        """The rules live in core.list_edits; this only explains the outcome."""
         current_status = entry.get('status', '')
-        total_episodes = anime.get('episodes', 0)
-
-        if current_status == 'planned' and episode > 0:
-            self.logger.info('Status change: %s -> watching (started watching)', current_status)
-            return 'watching'
-
-        if total_episodes > 0 and episode >= total_episodes:
-            if entry.get('score', 0) > 0:
-                self.logger.info(
-                    'Status change: %s -> completed (finished, has score)', current_status
-                )
-                return 'completed'
+        if new_status:
+            self.logger.info('Status change: %s -> %s', current_status, new_status)
+            return
+        total_episodes = anime.get('episodes', 0) or 0
+        if total_episodes and episode >= total_episodes and current_status != 'completed':
             self.logger.info(
                 'Anime finished but no score set, keeping status as %s', current_status
             )
-
-        return None
 
     def _notify(self, entry: Dict[str, Any], anime: Dict[str, Any], anime_name: str,
                 episode: int, previous_status: str, new_status: Optional[str]) -> None:
@@ -196,7 +189,8 @@ class ScrobbleService:
         try:
             if new_status == 'completed':
                 is_rewatch = previous_status == 'rewatching'
-                rewatch_count = entry.get('rewatches', 0) + 1 if is_rewatch else 0
+                # Already incremented on the entry when the rewatch was committed.
+                rewatch_count = (entry.get('rewatches', 0) or 0) if is_rewatch else 0
                 self.logger.info(
                     'Sending completion Telegram notification for %s%s',
                     anime_name, f' (rewatch #{rewatch_count})' if is_rewatch else '',

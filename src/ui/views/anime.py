@@ -250,8 +250,7 @@ class AnimeListView(ListView):
         )
 
     def _set_status(self, entry: Dict[str, Any], status: str) -> None:
-        episodes = 0 if status == 'rewatching' else None
-        self.controller.update_anime(entry, status=status, episodes=episodes)
+        self.controller.update_anime(entry, status=status)
 
     def _edit_entry(self, entry: Dict[str, Any]) -> None:
         from ui.dialogs.edit import AnimeEditDialog
