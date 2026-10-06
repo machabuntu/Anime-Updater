@@ -63,6 +63,20 @@
             font-size: 0.9em;
             color: #666;
         }
+        .last-request {
+            font-size: 0.9em;
+            padding: 8px 10px;
+            border-radius: 5px;
+            margin-bottom: 15px;
+        }
+        .last-request.ok {
+            background: #d4edda;
+            color: #155724;
+        }
+        .last-request.failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
     </style>
 </head>
 <body>
@@ -77,12 +91,15 @@
         <span id="anime-title">-</span><br>
         <span class="small-text">Episode <span id="anime-episode">-</span></span>
     </div>
+
+    <div id="tracking" class="small-text" style="display: none; margin-bottom: 10px;"></div>
+    <div id="last-request" class="last-request" style="display: none;"></div>
     
     <div class="manual-scrobble">
         <strong>Manual Scrobble:</strong><br>
         <input type="text" id="manual-title" placeholder="Anime title">
         <input type="number" id="manual-episode" placeholder="Episode number" min="1">
-        <button id="scrobble-btn" onclick="manualScrobble()">Scrobble Episode</button>
+        <button id="scrobble-btn">Scrobble Episode</button>
     </div>
     
     <div class="small-text" style="margin-top: 15px;">

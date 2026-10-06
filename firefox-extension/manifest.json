@@ -1,19 +1,30 @@
 {
   "manifest_version": 3,
   "name": "Shikimori Anime Scrobbler",
-  "version": "1.0",
+  "version": "1.2",
   "description": "Scrobble anime names/episodes from streaming websites and update progress in Shikimori Updater.",
   "permissions": [
     "activeTab",
     "scripting",
     "storage"
   ],
+  "host_permissions": [
+    "http://localhost:5000/*",
+    "http://127.0.0.1:5000/*"
+  ],
   "background": {
     "scripts": ["background.js"]
   },
   "content_scripts": [
     {
-      "matches": ["https://qfilms.ru/video/*","https://qanime.ru/video/*"],
+      "matches": [
+        "https://qfilms.ru/video/*",
+        "https://qanime.ru/video/*",
+        "https://animego.me/anime/*",
+        "https://*.animego.me/anime/*",
+        "https://animego.org/anime/*",
+        "https://*.animego.org/anime/*"
+      ],
       "js": ["content.js"]
     }
   ],

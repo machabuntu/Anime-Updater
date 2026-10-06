@@ -57,9 +57,144 @@ function extractEnglishTitleFromQanime(fullTitle) {
   return fullTitle;
 }
 
+// animego.me keeps every episode on one page. The English title is the
+// schema.org alternateName, and the episode being played is the player bar
+// item carrying the "active" class: its data-episode-number is the number
+// the site's own player syncs when the user picks a series or the embedded
+// player advances. The bar itself arrives later, from /player/<id>.
+function extractAnimego() {
+  const title = animegoTitle();
+  const episode = animegoEpisode();
+  if (!title || !episode) {
+    return null;
+  }
+  return {
+    title: title,
+    episode: episode,
+    url: window.location.href,
+    site: window.location.hostname,
+  };
+}
+
+// Shikimori and MAL search by the romaji or English name, so the Russian
+// name is only the last resort.
+function animegoTitle() {
+  const series = animegoSeriesNode();
+  const alternate = series && animegoText(series.alternateName);
+  if (alternate) {
+    return alternate;
+  }
+
+  const synonyms = document.querySelectorAll('.entity__title-synonyms li');
+  for (const item of synonyms) {
+    const text = item.textContent.trim();
+    if (/[a-z]/i.test(text) && !/[а-яё]/i.test(text)) {
+      return text;
+    }
+  }
+
+  const name = series && animegoText(series.name);
+  if (name) {
+    return name;
+  }
+  const heading = document.querySelector('.entity__title h1, h1');
+  return heading ? heading.textContent.trim() : null;
+}
+
+function animegoSeriesNode() {
+  const scripts = document.querySelectorAll('script[type="application/ld+json"]');
+  for (const script of scripts) {
+    let data;
+    try {
+      data = JSON.parse(script.textContent);
+    } catch (e) {
+      continue;
+    }
+    const node = animegoFindSeries(data);
+    if (node) {
+      return node;
+    }
+  }
+  return null;
+}
+
+function animegoFindSeries(node) {
+  if (!node || typeof node !== 'object') {
+    return null;
+  }
+  if (Array.isArray(node)) {
+    for (const item of node) {
+      const found = animegoFindSeries(item);
+      if (found) {
+        return found;
+      }
+    }
+    return null;
+  }
+  if (Array.isArray(node['@graph'])) {
+    const found = animegoFindSeries(node['@graph']);
+    if (found) {
+      return found;
+    }
+  }
+
+  const type = node['@type'];
+  const types = Array.isArray(type) ? type : [type];
+  if (types.includes('TVSeries') || types.includes('Movie') || types.includes('TVEpisode')) {
+    return node;
+  }
+  return null;
+}
+
+function animegoText(value) {
+  if (Array.isArray(value)) {
+    value = value.find(item => typeof item === 'string');
+  }
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function animegoEpisode() {
+  // The site's episode controller marks the playing item with "active" and
+  // stores the visible number in data-episode-number. data-episode itself is
+  // an internal id, not the series number.
+  const active = document.querySelector('[data-anime-player-episodes-target~="episode"].active')
+    || document.querySelector('.player-video-bar__item.active');
+  const episode = parseInt(active && active.dataset.episodeNumber, 10);
+  if (!Number.isInteger(episode) || episode < 1) {
+    return null;
+  }
+  return episode;
+}
+
+function isAnimego() {
+  return /(^|\.)animego\.[a-z]+$/i.test(window.location.hostname);
+}
+
+// The episode list is injected after load and the active item changes without
+// a navigation, so the bar has to be watched rather than read once.
+function watchAnimegoPlayer() {
+  const observer = new MutationObserver(() => {
+    const animeInfo = extractAnimego();
+    if (animeInfo) {
+      sendAnimeInfoUpdated(animeInfo);
+    }
+  });
+  observer.observe(document.documentElement, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ['class'],
+  });
+}
+
 // Extract anime information based on current site
 function extractAnimeInfo() {
   const hostname = window.location.hostname;
+
+  if (isAnimego()) {
+    return extractAnimego();
+  }
+
   let selectors = null;
   
   // Add debugging for qanime.ru and qfilms.ru
@@ -344,7 +479,8 @@ function isAnimeEpisodePage() {
   if (!isAnimeEpisodePage()) {
     return;
   }
-  
+  console.log('Anime Scrobbler: content script active on', window.location.href);
+
   // Wait for page to load completely
   function tryExtraction() {
     const animeInfo = extractAnimeInfo();
@@ -362,18 +498,29 @@ function isAnimeEpisodePage() {
     // Page already loaded
     setTimeout(tryExtraction, 1000); // Give it a second for dynamic content
   }
-  
-  // Also try when URL changes (for single-page applications)
-  let currentUrl = window.location.href;
+
+  if (isAnimego()) {
+    watchAnimegoPlayer();
+  }
+
+  // Also try when URL changes (for single-page applications). The hash is
+  // ignored: animego uses #player as an anchor, and that is not a new episode.
+  let currentPage = pageKey();
   setInterval(() => {
-    if (window.location.href !== currentUrl) {
-      currentUrl = window.location.href;
-      if (isAnimeEpisodePage()) {
-        setTimeout(tryExtraction, 2000); // Wait longer for SPA route changes
-      }
+    if (pageKey() === currentPage) {
+      return;
+    }
+    currentPage = pageKey();
+    cancelCurrentScrobble();
+    if (isAnimeEpisodePage()) {
+      setTimeout(tryExtraction, 2000); // Wait longer for SPA route changes
     }
   }, 1000);
 })();
+
+function pageKey() {
+  return window.location.origin + window.location.pathname + window.location.search;
+}
 
 // Listen for messages from popup
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -387,27 +534,38 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 // Send cancel request when page is about to be unloaded
 let currentAnimeInfo = null;
 
-window.addEventListener('beforeunload', () => {
-  // Cancel any pending scrobbles for this page
-  if (currentAnimeInfo) {
-    console.log('Anime Scrobbler: Page unloading, cancelling scrobble for:', currentAnimeInfo.title);
-    
-    // Send cancel request to background script
-    chrome.runtime.sendMessage({
-      type: 'CANCEL_SCROBBLE',
-      animeData: {
-        title: currentAnimeInfo.title,
-        episode: currentAnimeInfo.episode
-      }
-    });
+function cancelCurrentScrobble() {
+  if (!currentAnimeInfo) {
+    return;
   }
-});
+  console.log('Anime Scrobbler: Cancelling scrobble for:', currentAnimeInfo.title);
+  const animeData = {
+    title: currentAnimeInfo.title,
+    episode: currentAnimeInfo.episode,
+  };
+  currentAnimeInfo = null;
+  chrome.runtime.sendMessage({
+    type: 'CANCEL_SCROBBLE',
+    animeData: animeData,
+  });
+}
+
+window.addEventListener('beforeunload', cancelCurrentScrobble);
 
 // Update the sendAnimeInfo function to track current anime
 function sendAnimeInfoUpdated(animeInfo) {
   if (!animeInfo) return;
-  
-  currentAnimeInfo = animeInfo; // Track current anime for cancellation
+
+  // The player bar is re-rendered often. Sending the same episode again would
+  // restart the watch timer, and leaving the previous one running would
+  // scrobble an episode the user has already switched away from.
+  if (currentAnimeInfo
+      && currentAnimeInfo.title === animeInfo.title
+      && currentAnimeInfo.episode === animeInfo.episode) {
+    return;
+  }
+  cancelCurrentScrobble();
+  currentAnimeInfo = animeInfo;
   console.log('Anime Scrobbler: Sending anime info:', animeInfo);
   
   chrome.runtime.sendMessage({

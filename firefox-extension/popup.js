@@ -20,43 +20,89 @@ async function checkAPIStatus() {
   }
 }
 
+// Sites content.js is declared for in manifest.json.
+const TRACKED_HOSTS = /(^|\.)(qanime\.ru|qfilms\.ru|animego\.[a-z]+)$/i;
+
+function isTrackedTab(tab) {
+  try {
+    return TRACKED_HOSTS.test(new URL(tab.url).hostname);
+  } catch (e) {
+    return false;
+  }
+}
+
+async function askContentScript(tabId) {
+  try {
+    const response = await chrome.tabs.sendMessage(tabId, { type: 'GET_ANIME_INFO' });
+    return { animeInfo: response ? response.animeInfo : null };
+  } catch (error) {
+    return null; // no content script in the tab
+  }
+}
+
 // Get current tab's anime info
 async function getCurrentAnimeInfo() {
-  try {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    
-    // Request anime info from content script
-    const response = await chrome.tabs.sendMessage(tab.id, { type: 'GET_ANIME_INFO' });
-    
-    if (response && response.animeInfo) {
-      const animeInfo = response.animeInfo;
-      displayCurrentAnime(animeInfo);
-      
-      // Pre-fill manual form with detected info
-      document.getElementById('manual-title').value = animeInfo.title || '';
-      document.getElementById('manual-episode').value = animeInfo.episode || '';
-    }
-  } catch (error) {
-    console.log('Could not get anime info from content script:', error);
-    // Fallback to injection method
+  const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+  if (!tab) {
+    return;
+  }
+
+  let reply = await askContentScript(tab.id);
+
+  // A tab opened before the extension was installed or reloaded has no
+  // content script, so nothing on it is being tracked. Start it now.
+  if (!reply && isTrackedTab(tab)) {
     try {
-      const results = await chrome.scripting.executeScript({
-        target: { tabId: (await chrome.tabs.query({ active: true, currentWindow: true }))[0].id },
-        function: extractAnimeInfoFromPage
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        files: ['content.js'],
       });
-      
-      if (results && results[0] && results[0].result) {
-        const animeInfo = results[0].result;
-        displayCurrentAnime(animeInfo);
-        
-        // Pre-fill manual form with detected info
-        document.getElementById('manual-title').value = animeInfo.title || '';
-        document.getElementById('manual-episode').value = animeInfo.episode || '';
-      }
-    } catch (fallbackError) {
-      console.log('Fallback extraction also failed:', fallbackError);
+      setTracking('Tracking started on this tab');
+      reply = await askContentScript(tab.id);
+    } catch (error) {
+      console.log('Could not start tracking on this tab:', error);
     }
   }
+
+  let animeInfo = reply && reply.animeInfo;
+  if (!reply && !isTrackedTab(tab)) {
+    setTracking('This site is not tracked automatically');
+    try {
+      const results = await chrome.scripting.executeScript({
+        target: { tabId: tab.id },
+        function: extractAnimeInfoFromPage
+      });
+      animeInfo = results && results[0] && results[0].result;
+    } catch (error) {
+      console.log('Fallback extraction failed:', error);
+    }
+  }
+
+  if (animeInfo) {
+    displayCurrentAnime(animeInfo);
+    document.getElementById('manual-title').value = animeInfo.title || '';
+    document.getElementById('manual-episode').value = animeInfo.episode || '';
+  }
+}
+
+function setTracking(text) {
+  const element = document.getElementById('tracking');
+  element.textContent = text;
+  element.style.display = 'block';
+}
+
+async function showLastRequest() {
+  const { lastRequest } = await chrome.storage.local.get('lastRequest');
+  if (!lastRequest) {
+    return;
+  }
+  const element = document.getElementById('last-request');
+  const action = lastRequest.action === 'cancel_scrobble' ? 'Cancelled' : 'Sent';
+  const time = new Date(lastRequest.time).toLocaleTimeString();
+  element.textContent = `${action} at ${time}: ${lastRequest.title} — episode ${lastRequest.episode}. `
+    + (lastRequest.ok ? 'The app accepted it.' : `Failed: ${lastRequest.message}`);
+  element.className = 'last-request ' + (lastRequest.ok ? 'ok' : 'failed');
+  element.style.display = 'block';
 }
 
 // Function to inject into page for anime extraction
@@ -205,9 +251,9 @@ async function manualScrobble() {
 
 // Initialize popup
 document.addEventListener('DOMContentLoaded', async () => {
+  // Inline onclick handlers are blocked by the extension CSP.
+  document.getElementById('scrobble-btn').addEventListener('click', manualScrobble);
   await checkAPIStatus();
   await getCurrentAnimeInfo();
+  await showLastRequest();
 });
-
-// Make manualScrobble available globally
-window.manualScrobble = manualScrobble;
