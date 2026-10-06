@@ -55,6 +55,9 @@ class AppController(QObject):
     # Internal hops from worker threads into the GUI thread.
     _scrobble_requested = Signal(str, int, str)
     _scrobble_cancelled = Signal(str, str)
+    # The player monitor has already waited for the minimum watch time, so its
+    # episodes are committed straight away instead of arming another timer.
+    _episode_watched = Signal(str, int)
 
     def __init__(self, config, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
@@ -89,6 +92,7 @@ class AppController(QObject):
 
         self._scrobble_requested.connect(self._begin_pending_scrobble)
         self._scrobble_cancelled.connect(self._cancel_pending_scrobble)
+        self._episode_watched.connect(self._process_episode)
 
         self._wire_player_monitor()
         self.api_server = self._start_api_server()
@@ -775,9 +779,7 @@ class AppController(QObject):
             'Episode watched: %s - episode %s (%.1fs)',
             episode_info.anime_name, episode_info.episode_number, watch_time,
         )
-        self._scrobble_requested.emit(
-            episode_info.anime_name, episode_info.episode_number, ''
-        )
+        self._episode_watched.emit(episode_info.anime_name, episode_info.episode_number)
 
     def _on_player_closed(self) -> None:
         self.now_watching_changed.emit(NOW_WATCHING_IDLE)

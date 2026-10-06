@@ -45,7 +45,6 @@ class PlayerMonitor:
         merged = list(dict.fromkeys(configured + list(defaults)))
         self.supported_players = merged
         self.check_interval = config.get('monitoring.check_interval', 5)
-        self.min_watch_time = config.get('monitoring.min_watch_time', 60)
         
         # Setup logging
         from utils.logger import get_logger
@@ -384,6 +383,11 @@ class PlayerMonitor:
         # Handle the new file as if a new player opened
         self._handle_new_player(new_player)
     
+    @property
+    def min_watch_time(self) -> float:
+        """Read on every check so a change in Options applies without a restart."""
+        return self.config.get('monitoring.min_watch_time', 60)
+
     def _check_watch_time_updates(self):
         """Check if any currently playing episodes have reached 1 minute watch time"""
         current_time = time.time()
